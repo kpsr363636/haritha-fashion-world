@@ -1,21 +1,60 @@
 spring:
   jpa:
     show-sql: false
+    hibernate:
+      ddl-auto: validate
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      timeout: 3000ms
 
 logging:
   level:
     com.harithafashion: INFO
     org.springframework.security: WARN
+    org.hibernate: WARN
     root: WARN
-
-app:
-  cors:
-    allowed-origins: ${CORS_ORIGINS:https://www.harithafashion.com,https://harithafashion.com}
+  file:
+    name: /var/log/haritha/app.log
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 30
 
 server:
   forward-headers-strategy: framework
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 20
+    max-connections: 8192
+    accept-count: 100
 
 management:
   endpoint:
     health:
       show-details: never
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:https://www.harithafashion.com,https://harithafashion.com}
+  frontend-url: ${FRONTEND_URL:https://www.harithafashion.com}
+
+scheduler:
+  abandoned-cart:
+    enabled: true
+  stock-alerts:
+    enabled: true
+  seller-payouts:
+    enabled: true
+  wishlist-price-drop:
+    enabled: true
+  order-expiry:
+    enabled: true

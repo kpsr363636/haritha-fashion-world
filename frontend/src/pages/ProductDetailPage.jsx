@@ -14,6 +14,8 @@ import ReviewsSection from '../components/product/ReviewsSection'
 import QASection from '../components/product/QASection'
 import LoadingScreen from '../components/ui/LoadingScreen'
 import TrustStrip from '../components/ui/TrustStrip'
+import ImageZoom from '../components/common/ImageZoom'
+import EmiDisplay from '../components/product/EmiDisplay'
 import { Heart, Star, Truck, RotateCcw, ShieldCheck, MapPin } from 'lucide-react'
 
 export default function ProductDetailPage() {
@@ -98,12 +100,12 @@ export default function ProductDetailPage() {
 
       <div className="grid lg:grid-cols-2 gap-8 lg:gap-14">
         <div>
-          <div className="aspect-[3/4] bg-gradient-to-br from-cream-100 to-brand-50 rounded-2xl overflow-hidden shadow-card relative group">
-            <img
+          <div className="aspect-[3/4] bg-gradient-to-br from-cream-100 to-brand-50 rounded-2xl overflow-hidden shadow-card relative">
+            <ImageZoom
               src={resolveImageUrl(product.images?.[selectedImage]?.imageUrl)}
               alt={product.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-              onError={imageFallback}
+              className="w-full h-full"
+              zoomLevel={2.5}
             />
             {discount > 0 && <span className="discount-badge text-sm">{discount}% OFF</span>}
           </div>
@@ -176,6 +178,8 @@ export default function ProductDetailPage() {
               {wishlisted ? 'Saved' : 'Wishlist'}
             </button>
           </div>
+
+          <EmiDisplay price={product.finalPrice} />
 
           <div className="flex gap-3">
             {!outOfStock ? (
