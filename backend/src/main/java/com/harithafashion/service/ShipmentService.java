@@ -127,34 +127,37 @@ public class ShipmentService {
         try {
             String token = getOrRefreshToken();
             Order order = req.getOrder();
-            Map<String, Object> payload = Map.of(
-                    "order_id", order.getOrderNumber() + "-RET",
-                    "order_date", order.getPlacedAt().toLocalDate().toString(),
-                    "channel_id", "",
-                    "billing_customer_name", getSnap(order, "fullName"),
-                    "billing_address", getSnap(order, "addressLine"),
-                    "billing_city", getSnap(order, "city"),
-                    "billing_state", getSnap(order, "state"),
-                    "billing_country", "India",
-                    "billing_pincode", getSnap(order, "pincode"),
-                    "billing_email", order.getUser().getEmail() != null ? order.getUser().getEmail() : "",
-                    "billing_phone", getSnap(order, "mobile"),
-                    "pickup_customer_name", "Haritha Fashion World",
-                    "pickup_address", pickupLocation,
-                    "pickup_city", "Hyderabad",
-                    "pickup_state", "Telangana",
-                    "pickup_country", "India",
-                    "pickup_pincode", "500001",
-                    "pickup_email", shiprocketEmail,
-                    "pickup_phone", "9000000000",
-                    "order_items", List.of(Map.of(
-                            "name", req.getOrderItem() != null ? req.getOrderItem().getProductName() : "Product",
-                            "sku", "RETURN",
-                            "units", 1,
-                            "selling_price", req.getOrderItem() != null ? req.getOrderItem().getUnitPrice() : 0)),
-                    "payment_method", "Prepaid",
-                    "sub_total", req.getOrderItem() != null ? req.getOrderItem().getTotalPrice() : 0,
-                    "length", 10, "breadth", 10, "height", 10, "weight", 0.3);
+            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("order_id", order.getOrderNumber() + "-RET");
+            payload.put("order_date", order.getPlacedAt().toLocalDate().toString());
+            payload.put("channel_id", "");
+            payload.put("billing_customer_name", getSnap(order, "fullName"));
+            payload.put("billing_address", getSnap(order, "addressLine"));
+            payload.put("billing_city", getSnap(order, "city"));
+            payload.put("billing_state", getSnap(order, "state"));
+            payload.put("billing_country", "India");
+            payload.put("billing_pincode", getSnap(order, "pincode"));
+            payload.put("billing_email", order.getUser().getEmail() != null ? order.getUser().getEmail() : "");
+            payload.put("billing_phone", getSnap(order, "mobile"));
+            payload.put("pickup_customer_name", "Haritha Fashion World");
+            payload.put("pickup_address", pickupLocation);
+            payload.put("pickup_city", "Hyderabad");
+            payload.put("pickup_state", "Telangana");
+            payload.put("pickup_country", "India");
+            payload.put("pickup_pincode", "500001");
+            payload.put("pickup_email", shiprocketEmail);
+            payload.put("pickup_phone", "9000000000");
+            payload.put("order_items", List.of(Map.of(
+                    "name", req.getOrderItem() != null ? req.getOrderItem().getProductName() : "Product",
+                    "sku", "RETURN",
+                    "units", 1,
+                    "selling_price", req.getOrderItem() != null ? req.getOrderItem().getUnitPrice() : 0)));
+            payload.put("payment_method", "Prepaid");
+            payload.put("sub_total", req.getOrderItem() != null ? req.getOrderItem().getTotalPrice() : 0);
+            payload.put("length", 10);
+            payload.put("breadth", 10);
+            payload.put("height", 10);
+            payload.put("weight", 0.3);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> resp = (Map<String, Object>) WebClient.create(baseUrl)
@@ -296,23 +299,26 @@ public class ShipmentService {
                         "hsn", i.getHsnCode() != null ? i.getHsnCode() : ""))
                 .toList();
 
-        Map<String, Object> payload = Map.of(
-                "order_id", order.getOrderNumber(),
-                "order_date", order.getPlacedAt().toLocalDate().toString(),
-                "pickup_location", pickupLocation,
-                "billing_customer_name", snap.getOrDefault("fullName", "Customer"),
-                "billing_address", snap.getOrDefault("addressLine", ""),
-                "billing_city", snap.getOrDefault("city", ""),
-                "billing_state", snap.getOrDefault("state", ""),
-                "billing_country", "India",
-                "billing_pincode", snap.getOrDefault("pincode", ""),
-                "billing_email", order.getUser().getEmail() != null ? order.getUser().getEmail() : "",
-                "billing_phone", snap.getOrDefault("mobile", order.getUser().getMobile()),
-                "shipping_is_billing", true,
-                "order_items", orderItems,
-                "payment_method", order.getIsCod() ? "COD" : "Prepaid",
-                "sub_total", order.getSubtotal(),
-                "length", 30, "breadth", 20, "height", 10, "weight", 0.5);
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("order_id", order.getOrderNumber());
+        payload.put("order_date", order.getPlacedAt().toLocalDate().toString());
+        payload.put("pickup_location", pickupLocation);
+        payload.put("billing_customer_name", snap.getOrDefault("fullName", "Customer"));
+        payload.put("billing_address", snap.getOrDefault("addressLine", ""));
+        payload.put("billing_city", snap.getOrDefault("city", ""));
+        payload.put("billing_state", snap.getOrDefault("state", ""));
+        payload.put("billing_country", "India");
+        payload.put("billing_pincode", snap.getOrDefault("pincode", ""));
+        payload.put("billing_email", order.getUser().getEmail() != null ? order.getUser().getEmail() : "");
+        payload.put("billing_phone", snap.getOrDefault("mobile", order.getUser().getMobile()));
+        payload.put("shipping_is_billing", true);
+        payload.put("order_items", orderItems);
+        payload.put("payment_method", order.getIsCod() ? "COD" : "Prepaid");
+        payload.put("sub_total", order.getSubtotal());
+        payload.put("length", 30);
+        payload.put("breadth", 20);
+        payload.put("height", 10);
+        payload.put("weight", 0.5);
 
         Map<String, Object> resp = (Map<String, Object>) WebClient.create(baseUrl)
                 .post().uri("/orders/create/adhoc")

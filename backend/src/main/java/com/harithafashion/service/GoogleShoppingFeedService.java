@@ -34,8 +34,8 @@ public class GoogleShoppingFeedService {
         productRepository.findByStatus(ProductStatus.ACTIVE, PageRequest.of(0, 5000)).forEach(p -> {
             String imageUrl = p.getImages() != null && !p.getImages().isEmpty()
                     ? p.getImages().stream().filter(i -> Boolean.TRUE.equals(i.getIsPrimary()))
-                        .findFirst().map(ProductImage::getUrl)
-                        .orElse(p.getImages().get(0).getUrl())
+                        .findFirst().map(ProductImage::getImageUrl)
+                        .orElse(p.getImages().get(0).getImageUrl())
                     : "";
 
             String availability = p.getVariants() != null && p.getVariants().stream()
@@ -43,7 +43,8 @@ public class GoogleShoppingFeedService {
                     ? "in stock" : "out of stock";
 
             String condition = "new";
-            String brand = p.getBrand() != null ? p.getBrand() : "Haritha Fashion";
+            String brand = p.getSeller() != null && p.getSeller().getBusinessName() != null
+                    ? p.getSeller().getBusinessName() : "Haritha Fashion";
             String category = p.getCategory() != null ? p.getCategory().getName() : "Apparel & Accessories";
 
             xml.append("    <item>\n");
@@ -52,9 +53,10 @@ public class GoogleShoppingFeedService {
             xml.append("      <g:description>").append(esc(truncate(p.getDescription(), 500))).append("</g:description>\n");
             xml.append("      <g:link>").append(frontendUrl).append("/products/").append(p.getSlug()).append("</g:link>\n");
             xml.append("      <g:image_link>").append(esc(imageUrl)).append("</g:image_link>\n");
-            xml.append("      <g:price>").append(p.getBasePrice()).append(" INR</g:price>\n");
-            if (p.getSellingPrice() != null && p.getSellingPrice().compareTo(p.getBasePrice()) < 0) {
-                xml.append("      <g:sale_price>").append(p.getSellingPrice()).append(" INR</g:sale_price>\n");
+            xml.append("      <g:price>").append(p.getMrp()).append(" INR</g:price>\n");
+            if (p.getBasePrice() != null && p.getMrp() != null
+                    && p.getBasePrice().compareTo(p.getMrp()) < 0) {
+                xml.append("      <g:sale_price>").append(p.getBasePrice()).append(" INR</g:sale_price>\n");
             }
             xml.append("      <g:availability>").append(availability).append("</g:availability>\n");
             xml.append("      <g:condition>").append(condition).append("</g:condition>\n");
