@@ -1,0 +1,27 @@
+---
+description: Haritha Fashion World project context and deferred work
+alwaysApply: true
+---
+
+# Project context
+
+## Backend — deferred (production only)
+These do NOT block manual testing:
+- Production API keys (Razorpay, MSG91, AWS, Shiprocket) — dev mode works without them
+- JWT logout blacklist — logout clears client token; server token still valid until expiry
+- Automated tests
+
+Core backend E2E fixes applied: order detail DTO, invoice PDF, category slug filter, public reviews/Q&A/gift-card balance, COD verify, admin ship/deliver, seller order DTO, cart clear.
+
+## Demo credentials
+- Admin: admin@harithafashion.com / password
+- Seller: seller@harithafashion.com / password
+- Customer: customer@harithafashion.com / password
+- Coupon: WELCOME10 | Gift card: HFDEMO500
+
+## Start stack
+```bash
+./scripts/start-postgres.sh
+./scripts/run-backend.sh
+cd frontend && npm run dev
+```

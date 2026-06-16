@@ -1,0 +1,24 @@
+name: Backend Deploy
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+      - name: Build
+        working-directory: backend
+        run: mvn clean package -DskipTests
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: haritha-fashion-backend
+          path: backend/target/haritha-fashion-*.jar

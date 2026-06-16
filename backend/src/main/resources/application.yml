@@ -1,0 +1,119 @@
+spring:
+  application:
+    name: haritha-fashion
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/haritha_fashion}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 50
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+  task:
+    scheduling:
+      pool:
+        size: 5
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+  mail:
+    host: email-smtp.${AWS_REGION:ap-south-1}.amazonaws.com
+    port: 587
+    username: ${AWS_SES_SMTP_USER:}
+    password: ${AWS_SES_SMTP_PASS:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-change-in-production-minimum-32-chars}
+  expiry-days: 7
+
+aws:
+  region: ${AWS_REGION:ap-south-1}
+  s3:
+    bucket: ${S3_BUCKET:haritha-fashion-media}
+    cloudfront-domain: ${CLOUDFRONT_DOMAIN:}
+  ses:
+    from-email: noreply@harithafashion.com
+    from-name: Haritha Fashion World
+
+msg91:
+  api-key: ${MSG91_API_KEY:}
+  otp-template-id: ${MSG91_OTP_TEMPLATE_ID:}
+  whatsapp-template-order-confirm: ${MSG91_WA_ORDER_TEMPLATE:}
+  whatsapp-template-shipped: ${MSG91_WA_SHIPPED_TEMPLATE:}
+  sender-id: HRTHFW
+
+razorpay:
+  key-id: ${RAZORPAY_KEY_ID:}
+  key-secret: ${RAZORPAY_KEY_SECRET:}
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  payout-account-number: ${RAZORPAY_PAYOUT_ACCOUNT:}
+
+shiprocket:
+  email: ${SHIPROCKET_EMAIL:}
+  password: ${SHIPROCKET_PASSWORD:}
+  base-url: https://apiv2.shiprocket.in/v1/external
+  pickup-location: ${SHIPROCKET_PICKUP_LOCATION:Primary}
+
+google:
+  client-id: ${GOOGLE_CLIENT_ID:}
+
+scheduler:
+  abandoned-cart:
+    enabled: true
+  stock-alerts:
+    enabled: true
+  seller-payouts:
+    enabled: true
+    day-of-month: 1
+  wishlist-price-drop:
+    enabled: true
+  order-expiry:
+    enabled: true
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000}
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}

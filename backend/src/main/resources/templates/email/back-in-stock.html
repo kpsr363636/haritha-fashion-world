@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title>Haritha Fashion</title></head>
+<body style="font-family:Arial,sans-serif;color:#333;">
+<h2 style="color:#B5476A;">Haritha Fashion World</h2>
+<p>Hi <span th:text="${name}">there</span>,</p>
+<p th:if="${orderNumber != null}">Order: <strong th:text="${orderNumber}"></strong></p>
+<p th:if="${productName != null}">Product: <strong th:text="${productName}"></strong></p>
+<p th:if="${amount != null}">Amount: <strong th:text="${amount}"></strong></p>
+<p th:if="${points != null}">Points: <strong th:text="${points}"></strong></p>
+<p th:if="${status != null}">Status: <strong th:text="${status}"></strong></p>
+<p th:if="${trackingId != null}">Tracking: <strong th:text="${trackingId}"></strong></p>
+<p th:if="${resetUrl != null}"><a th:href="${resetUrl}">Reset your password</a></p>
+<p th:if="${cartUrl != null}"><a th:href="${cartUrl}">View your cart</a></p>
+<p th:if="${shopUrl != null}"><a th:href="${shopUrl}">Shop now</a></p>
+<p style="color:#B5476A;">— Team Haritha Fashion</p>
+</body>
+</html>

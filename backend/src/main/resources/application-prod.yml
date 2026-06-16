@@ -1,0 +1,21 @@
+spring:
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    com.harithafashion: INFO
+    org.springframework.security: WARN
+    root: WARN
+
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:https://www.harithafashion.com,https://harithafashion.com}
+
+server:
+  forward-headers-strategy: framework
+
+management:
+  endpoint:
+    health:
+      show-details: never
