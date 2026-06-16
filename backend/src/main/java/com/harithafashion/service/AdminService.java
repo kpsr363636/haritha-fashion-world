@@ -5,15 +5,17 @@ import com.harithafashion.entity.enums.SellerStatus;
 import com.harithafashion.entity.enums.UserRole;
 import com.harithafashion.exception.ResourceNotFoundException;
 import com.harithafashion.repository.*;
+import com.harithafashion.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +28,8 @@ public class AdminService {
     private final ReturnRequestRepository returnRequestRepository;
     private final EmailService emailService;
     private final ShipmentService shipmentService;
+    private final JwtUtil jwtUtil;
+    private final StringRedisTemplate redisTemplate;
 
     public Map<String, Object> dashboard() {
         Map<String, Object> m = new HashMap<>();
@@ -123,5 +127,55 @@ public class AdminService {
             return returnRequestRepository.findByStatusOrderByCreatedAtDesc(status, PageRequest.of(page, size));
         }
         return returnRequestRepository.findAll(PageRequest.of(page, size));
+    }
+
+    /**
+     * Admin impersonation — generates a short-lived read-only token for the target user.
+     * The token carries an extra claim that marks it as an impersonation token so that
+     * write endpoints can optionally reject it.
+     */
+    public Map<String, String> impersonateUser(UUID targetUserId) {
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        String token = jwtUtil.generateImpersonationToken(target);
+        return Map.of(
+                "token", token,
+                "userId", target.getId().toString(),
+                "email", target.getEmail() != null ? target.getEmail() : "",
+                "name", target.getName(),
+                "note", "Impersonation token — read-only, expires in 30 minutes");
+    }
+
+    public Page<Map<String, Object>> fraudFlaggedUsers(int page, int size) {
+        Set<String> keys = redisTemplate.keys("fraud:flag:*");
+        if (keys == null || keys.isEmpty()) {
+            return new PageImpl<>(List.of(), PageRequest.of(page, size), 0);
+        }
+        List<UUID> ids = keys.stream()
+                .map(k -> k.replace("fraud:flag:", ""))
+                .map(s -> { try { return UUID.fromString(s); } catch (Exception e) { return null; } })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        int start = page * size;
+        int end = Math.min(start + size, ids.size());
+        List<UUID> pageIds = (start >= ids.size()) ? List.of() : ids.subList(start, end);
+
+        List<Map<String, Object>> result = userRepository.findAllById(pageIds).stream().map(u -> {
+            String flag = redisTemplate.opsForValue().get("fraud:flag:" + u.getId());
+            return Map.<String, Object>of(
+                    "id", u.getId(),
+                    "name", u.getName(),
+                    "email", u.getEmail() != null ? u.getEmail() : "",
+                    "mobile", u.getMobile() != null ? u.getMobile() : "",
+                    "fraudFlag", flag != null ? flag : "REVIEW",
+                    "blocked", Boolean.TRUE.equals(u.getIsBlocked()));
+        }).collect(Collectors.toList());
+
+        return new PageImpl<>(result, PageRequest.of(page, size), ids.size());
+    }
+
+    public void clearFraudFlag(UUID userId) {
+        redisTemplate.delete("fraud:flag:" + userId);
     }
 }

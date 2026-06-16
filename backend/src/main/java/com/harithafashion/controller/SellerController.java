@@ -14,9 +14,12 @@ import com.harithafashion.service.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 import java.util.UUID;
@@ -32,6 +35,7 @@ public class SellerController {
     private final SellerPayoutRepository payoutRepository;
     private final ReviewService reviewService;
     private final ProductQAService productQAService;
+    private final BulkUploadService bulkUploadService;
 
     @PostMapping("/register")
     public ApiResponse<?> register(@AuthenticationPrincipal UserPrincipal p, @RequestBody Map<String, String> body) {
@@ -65,6 +69,29 @@ public class SellerController {
     public ApiResponse<Product> createProduct(@AuthenticationPrincipal UserPrincipal p,
                                                 @Valid @RequestBody CreateProductRequest req) {
         return ApiResponse.ok(sellerProductService.createProduct(p.getId(), req));
+    }
+
+    @PostMapping(value = "/products/bulk-upload/excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
+    public ApiResponse<Map<String, Object>> bulkUploadExcel(@AuthenticationPrincipal UserPrincipal p,
+                                                            @RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(bulkUploadService.processExcel(file, p.getId()));
+    }
+
+    @PostMapping(value = "/products/bulk-upload/csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
+    public ApiResponse<Map<String, Object>> bulkUploadCsv(@AuthenticationPrincipal UserPrincipal p,
+                                                          @RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(bulkUploadService.processCsv(file, p.getId()));
+    }
+
+    @GetMapping("/products/bulk-upload/template")
+    @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
+    public ResponseEntity<String> bulkUploadTemplate() {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header("Content-Disposition", "attachment; filename=\"product-upload-template.csv\"")
+                .body(bulkUploadService.generateTemplate());
     }
 
     @PutMapping("/products/{productId}")

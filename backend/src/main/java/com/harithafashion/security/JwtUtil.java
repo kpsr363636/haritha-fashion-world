@@ -1,5 +1,6 @@
 package com.harithafashion.security;
 
+import com.harithafashion.entity.User;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -67,5 +68,29 @@ public class JwtUtil {
                 UUID.fromString(claims.getSubject()),
                 claims.get("mobile", String.class),
                 claims.get("role", String.class));
+    }
+
+    /** Short-lived (30 min) impersonation token with read-only marker. */
+    public String generateImpersonationToken(User target) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + 30 * 60 * 1000L);
+        return Jwts.builder()
+                .setSubject(target.getId().toString())
+                .claim("mobile", target.getMobile())
+                .claim("role", target.getRole().name())
+                .claim("impersonation", true)
+                .setIssuedAt(now)
+                .setExpiration(expiry)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public boolean isImpersonation(String token) {
+        try {
+            Boolean flag = parseClaims(token).get("impersonation", Boolean.class);
+            return Boolean.TRUE.equals(flag);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

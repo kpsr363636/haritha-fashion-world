@@ -210,6 +210,22 @@ public class AdminController {
         return ApiResponse.ok(supportService.updateStatus(id, body.get("status")));
     }
 
+    @PostMapping("/users/{id}/impersonate")
+    public ApiResponse<Map<String, String>> impersonate(@PathVariable UUID id) {
+        return ApiResponse.ok(adminService.impersonateUser(id));
+    }
+
+    @GetMapping("/fraud/queue")
+    public ApiResponse<?> fraudQueue(@RequestParam(defaultValue = "0") int page) {
+        return ApiResponse.ok(adminService.fraudFlaggedUsers(page, 20));
+    }
+
+    @DeleteMapping("/fraud/queue/{userId}")
+    public ApiResponse<Void> clearFraudFlag(@PathVariable UUID userId) {
+        adminService.clearFraudFlag(userId);
+        return ApiResponse.ok(null);
+    }
+
     @PutMapping("/orders/{id}/deliver")
     public ApiResponse<Void> markDelivered(@PathVariable UUID id) {
         adminService.markOrderDelivered(id);
