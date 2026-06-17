@@ -42,6 +42,7 @@ public class SecurityConfig {
             "/health",
             "/actuator/health",
             "/payments/webhook",
+            "/webhooks/**",
             "/sitemap.xml",
             "/robots.txt",
             "/search/**",

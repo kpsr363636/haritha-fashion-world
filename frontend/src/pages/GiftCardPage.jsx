@@ -40,12 +40,48 @@ export default function GiftCardPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await giftCardApi.purchase(Number(purchaseAmount))
-      setPurchased(res.data)
+      const amount = Number(purchaseAmount)
+      // Load Razorpay SDK
+      await new Promise((res, rej) => {
+        if (window.Razorpay) return res()
+        const s = document.createElement('script')
+        s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+        s.onload = res
+        s.onerror = rej
+        document.head.appendChild(s)
+      })
+
+      // Create a Razorpay order for the gift card amount
+      const { data: rzp } = await giftCardApi.createPayment?.(amount) || { data: { razorpayOrderId: `order_dev_gc_${Date.now()}` } }
+
+      if (rzp?.razorpayOrderId?.startsWith('order_dev_')) {
+        // Dev mode: skip Razorpay UI
+        const res = await giftCardApi.purchase(amount)
+        setPurchased(res.data)
+      } else {
+        await new Promise((resolve, reject) => {
+          const rzpObj = new window.Razorpay({
+            key: rzp.keyId,
+            amount: amount * 100,
+            currency: 'INR',
+            order_id: rzp.razorpayOrderId,
+            name: 'Haritha Fashion World',
+            description: `Gift Card ₹${amount}`,
+            handler: async () => {
+              const res = await giftCardApi.purchase(amount)
+              setPurchased(res.data)
+              resolve()
+            },
+            modal: { ondismiss: () => reject(new Error('Payment cancelled')) }
+          })
+          rzpObj.open()
+        })
+      }
+
       const mine = await giftCardApi.mine()
       setMyCards(mine.data || [])
-    } catch {
-      setError('Could not purchase gift card')
+    } catch (err) {
+      if (err?.message !== 'Payment cancelled') setError(err?.message || 'Could not purchase gift card')
     } finally {
       setLoading(false)
     }

@@ -7,6 +7,7 @@ import com.harithafashion.entity.enums.OrderStatus;
 import com.harithafashion.entity.enums.PaymentStatus;
 import com.harithafashion.exception.BadRequestException;
 import com.harithafashion.exception.ResourceNotFoundException;
+import com.harithafashion.entity.NotificationPreference;
 import com.harithafashion.repository.*;
 import com.harithafashion.util.OrderIdGenerator;
 import org.springframework.context.annotation.Lazy;
@@ -51,6 +52,7 @@ public class OrderService {
     private final PaymentService paymentService;
     private final ShipmentService shipmentService;
     private final ShipmentRepository shipmentRepository;
+    private final NotificationPreferenceRepository notificationPreferenceRepository;
     private final SecureRandom random = new SecureRandom();
 
     public OrderService(OrderRepository orderRepository, OrderItemRepository orderItemRepository,
@@ -63,7 +65,8 @@ public class OrderService {
                         FraudDetectionService fraudDetectionService, CouponService couponService,
                         GiftCardService giftCardService, LoyaltyService loyaltyService,
                         RefundService refundService, @Lazy PaymentService paymentService,
-                        ShipmentService shipmentService, ShipmentRepository shipmentRepository) {
+                        ShipmentService shipmentService, ShipmentRepository shipmentRepository,
+                        NotificationPreferenceRepository notificationPreferenceRepository) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.userRepository = userRepository;
@@ -87,6 +90,13 @@ public class OrderService {
         this.paymentService = paymentService;
         this.shipmentService = shipmentService;
         this.shipmentRepository = shipmentRepository;
+        this.notificationPreferenceRepository = notificationPreferenceRepository;
+    }
+
+    /** Returns the NotificationPreference for a user, or defaults allowing everything. */
+    private NotificationPreference getPrefs(UUID userId) {
+        return notificationPreferenceRepository.findByUserId(userId)
+                .orElse(NotificationPreference.builder().build());
     }
 
     @Transactional
@@ -173,9 +183,15 @@ public class OrderService {
         loyaltyService.awardForOrder(order);
         clearCart(userId);
 
-        emailService.sendOrderConfirmedEmail(user.getEmail(), user.getName(), order.getOrderNumber(), total.toString());
-        whatsAppService.sendOrderConfirmation(user.getMobile(), order.getOrderNumber(), total.toString(), "3-5 days");
-        if (isCod && codOtp != null) smsService.sendCodOtp(user.getMobile(), codOtp);
+        NotificationPreference prefs = getPrefs(userId);
+        if (Boolean.TRUE.equals(prefs.getOrderUpdatesEmail()) && user.getEmail() != null) {
+            emailService.sendOrderConfirmedEmail(user.getEmail(), user.getName(), order.getOrderNumber(), total.toString());
+        }
+        if (Boolean.TRUE.equals(prefs.getOrderUpdatesWhatsapp()) && user.getMobile() != null) {
+            whatsAppService.sendOrderConfirmation(user.getMobile(), order.getOrderNumber(), total.toString(), "3-5 days");
+        }
+        // COD OTP via SMS is always mandatory (functional, not marketing)
+        if (isCod && codOtp != null && user.getMobile() != null) smsService.sendCodOtp(user.getMobile(), codOtp);
 
         PlaceOrderResponse.PlaceOrderResponseBuilder resp = PlaceOrderResponse.builder()
                 .orderId(order.getId()).orderNumber(order.getOrderNumber())
@@ -308,8 +324,10 @@ public class OrderService {
         if (!order.getCodOtp().equals(otp)) throw new BadRequestException("Invalid OTP");
         order.setCodOtpVerified(true);
         order.setPaymentStatus(PaymentStatus.PAID);
+        order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
-        shipmentService.markDelivered(orderId);
+        // COD delivery confirmed — create shipment (not mark delivered; delivery happens later)
+        shipmentService.createShipment(orderId);
     }
 
     private void clearCart(UUID userId) {

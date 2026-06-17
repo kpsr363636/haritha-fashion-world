@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { sellerApi } from '../../api/adminApi'
 import { categoryApi } from '../../api/productApi'
+import { uploadApi } from '../../api/uploadApi'
 import ProtectedRoute from '../../components/common/ProtectedRoute'
+import BulkUploadModal from '../../components/seller/BulkUploadModal'
 import { useAuth } from '../../context/AuthContext'
 import { formatINR, formatDate } from '../../utils/formatters'
+import { Upload, Image } from 'lucide-react'
 
 function SellerRegisterForm({ onDone }) {
   const { login, user, token } = useAuth()
@@ -45,6 +48,9 @@ function SellerDashboardContent() {
   const [productForm, setProductForm] = useState({
     categoryId: '', name: '', description: '', basePrice: '', mrp: '', variants: [{ size: 'M', stockQuantity: 10 }]
   })
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState({})
+  const [uploadProgress, setUploadProgress] = useState({})
 
   const load = () => {
     sellerApi.dashboard().then((r) => setStats(r.data)).catch(() => {})
@@ -125,6 +131,24 @@ function SellerDashboardContent() {
     )
   }
 
+  const handleImageUpload = async (productId, e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingImages((prev) => ({ ...prev, [productId]: true }))
+    try {
+      const url = await uploadApi.uploadToS3(file, (pct) =>
+        setUploadProgress((prev) => ({ ...prev, [productId]: pct }))
+      )
+      await sellerApi.addProductImage?.(productId, url)
+      load()
+    } catch (err) {
+      alert('Image upload failed: ' + (err.message || 'Unknown error'))
+    } finally {
+      setUploadingImages((prev) => ({ ...prev, [productId]: false }))
+      setUploadProgress((prev) => ({ ...prev, [productId]: 0 }))
+    }
+  }
+
   const tabs = ['overview', 'products', 'add-product', ...(editing ? ['edit-product'] : []), 'orders', 'payouts']
 
   return (
@@ -158,18 +182,40 @@ function SellerDashboardContent() {
 
       {tab === 'products' && (
         <div className="space-y-3">
+          <div className="flex gap-3 mb-4">
+            <button type="button" onClick={() => setShowBulkUpload(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-brand text-brand rounded-xl text-sm hover:bg-brand/5">
+              <Upload className="w-4 h-4" /> Bulk Upload
+            </button>
+          </div>
           {products.map((p) => (
-            <div key={p.id} className="surface-card p-4 md:p-5 flex justify-between items-center gap-2">
-              <div>
-                <p className="font-medium">{p.name}</p>
-                <p className="text-sm text-gray-500">{p.status} · {formatINR(p.finalPrice || p.basePrice)}</p>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <button type="button" className="text-sm text-brand" onClick={() => startEdit(p.id)}>Edit</button>
-                <button type="button" className="text-sm text-brand" onClick={() => sellerApi.updateStatus(p.id, p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE').then(load)}>
-                  {p.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                </button>
-                <button type="button" className="text-sm text-red-500" onClick={() => sellerApi.deleteProduct(p.id).then(load)}>Delete</button>
+            <div key={p.id} className="surface-card p-4 md:p-5">
+              <div className="flex justify-between items-center gap-2">
+                <div className="flex items-center gap-3">
+                  {p.images?.[0]?.imageUrl ? (
+                    <img src={p.images[0].imageUrl} alt={p.name} className="w-12 h-12 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
+                      <Image className="w-5 h-5 text-gray-400" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium">{p.name}</p>
+                    <p className="text-sm text-gray-500">{p.status} · {formatINR(p.finalPrice || p.basePrice)}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-wrap items-center">
+                  <label className="cursor-pointer text-sm text-indigo-600 hover:underline flex items-center gap-1">
+                    <Image className="w-3.5 h-3.5" />
+                    {uploadingImages[p.id] ? `${uploadProgress[p.id] || 0}%` : 'Add image'}
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(p.id, e)} />
+                  </label>
+                  <button type="button" className="text-sm text-brand" onClick={() => startEdit(p.id)}>Edit</button>
+                  <button type="button" className="text-sm text-brand" onClick={() => sellerApi.updateStatus(p.id, p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE').then(load)}>
+                    {p.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button type="button" className="text-sm text-red-500" onClick={() => sellerApi.deleteProduct(p.id).then(load)}>Delete</button>
+                </div>
               </div>
             </div>
           ))}
@@ -231,6 +277,9 @@ function SellerDashboardContent() {
       )}
 
       <Link to="/" className="inline-block mt-8 text-sm text-brand">← Back to store</Link>
+      {showBulkUpload && (
+        <BulkUploadModal onClose={() => setShowBulkUpload(false)} onDone={() => { setShowBulkUpload(false); load() }} />
+      )}
     </div>
   )
 }

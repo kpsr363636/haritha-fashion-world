@@ -39,6 +39,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     boolean existsByUserId(UUID userId);
 
+    boolean existsByUserIdAndPlacedAtAfter(UUID userId, LocalDateTime after);
+
     Page<Order> findByPlacedAtBetweenOrderByPlacedAtDesc(LocalDateTime from, LocalDateTime to, Pageable pageable);
 
     @Query("SELECT o FROM Order o WHERE o.user.id = :userId AND o.status NOT IN " +

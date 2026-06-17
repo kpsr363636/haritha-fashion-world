@@ -254,8 +254,14 @@ public class AdminController {
         return ApiResponse.ok(PageResponse.from(productQAService.listPending(page, 20)));
     }
 
+    @GetMapping("/payouts")
+    public ApiResponse<?> listPayouts(@RequestParam(defaultValue = "0") int page,
+                                      @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(adminService.listPayouts(page, size));
+    }
+
     @PostMapping("/payouts/process")
-    public ApiResponse<Void> payouts() {
+    public ApiResponse<Void> processPayouts() {
         payoutService.processMonthlyPayouts();
         return ApiResponse.ok(null);
     }

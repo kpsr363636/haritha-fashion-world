@@ -28,6 +28,7 @@ public class JwtUtil {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expiryMillis);
         return Jwts.builder()
+                .setId(UUID.randomUUID().toString())   // jti claim for blacklisting
                 .setSubject(userId.toString())
                 .claim("mobile", mobile)
                 .claim("role", role)
@@ -62,6 +63,26 @@ public class JwtUtil {
         return parseClaims(token).get("role", String.class);
     }
 
+    /** Returns the jti (unique token ID) for blacklisting, null if absent. */
+    public String getJti(String token) {
+        try {
+            return parseClaims(token).getId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Returns remaining TTL in milliseconds (0 if expired). */
+    public long getRemainingTtlMs(String token) {
+        try {
+            Date exp = parseClaims(token).getExpiration();
+            long remaining = exp.getTime() - System.currentTimeMillis();
+            return Math.max(remaining, 0);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public String refreshToken(String token) {
         Claims claims = parseClaims(token);
         return generateToken(
@@ -75,6 +96,7 @@ public class JwtUtil {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + 30 * 60 * 1000L);
         return Jwts.builder()
+                .setId(UUID.randomUUID().toString())
                 .setSubject(target.getId().toString())
                 .claim("mobile", target.getMobile())
                 .claim("role", target.getRole().name())

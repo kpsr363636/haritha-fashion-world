@@ -18,6 +18,10 @@ function AdminDashboardContent() {
   const [pendingReviews, setPendingReviews] = useState([])
   const [pendingQuestions, setPendingQuestions] = useState([])
   const [salesReport, setSalesReport] = useState(null)
+  const [sellerPayouts, setSellerPayouts] = useState([])
+  const [fraudQueue, setFraudQueue] = useState([])
+  const [topProducts, setTopProducts] = useState([])
+  const [impersonateMsg, setImpersonateMsg] = useState({})
   const [bannerForm, setBannerForm] = useState({ title: '', imageUrl: '', linkUrl: '', position: 'HOME_HERO' })
   const [couponForm, setCouponForm] = useState({ code: '', discountType: 'PERCENT', discountValue: 10, minOrderAmount: 499 })
 
@@ -43,14 +47,34 @@ function AdminDashboardContent() {
     adminApi.salesReport(from, to).then((r) => setSalesReport(r.data)).catch(() => {})
   }
 
-  const tabs = ['overview', 'orders', 'users', 'sellers', 'products', 'returns', 'support', 'banners', 'coupons', 'moderation', 'reports']
+  const loadExtendedReports = () => {
+    adminApi.sellerPayouts().then((r) => setSellerPayouts(r.data?.content || [])).catch(() => {})
+    adminApi.fraudQueue().then((r) => setFraudQueue(r.data || [])).catch(() => {})
+    adminApi.topProductsReport().then((r) => setTopProducts(r.data || [])).catch(() => {})
+  }
+
+  const impersonate = async (userId) => {
+    try {
+      const res = await adminApi.impersonateUser(userId)
+      setImpersonateMsg((m) => ({ ...m, [userId]: 'Token: ' + res.data?.token?.slice(0, 30) + '...' }))
+    } catch {
+      setImpersonateMsg((m) => ({ ...m, [userId]: 'Failed' }))
+    }
+  }
+
+  const tabs = ['overview', 'orders', 'users', 'sellers', 'products', 'returns', 'support', 'banners', 'coupons', 'moderation', 'payouts', 'fraud', 'reports']
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
       <div className="flex flex-wrap gap-2 mb-6">
         {tabs.map((t) => (
-          <button key={t} type="button" onClick={() => { setTab(t); if (t === 'reports') loadSalesReport() }} className={`px-4 py-2 rounded-lg text-sm capitalize ${tab === t ? 'bg-brand text-white' : 'bg-gray-100'}`}>{t}</button>
+          <button key={t} type="button" onClick={() => {
+            setTab(t)
+            if (t === 'reports') { loadSalesReport(); loadExtendedReports() }
+            if (t === 'payouts') loadExtendedReports()
+            if (t === 'fraud') loadExtendedReports()
+          }} className={`px-4 py-2 rounded-lg text-sm capitalize ${tab === t ? 'bg-brand text-white' : 'bg-gray-100'}`}>{t}</button>
         ))}
       </div>
 
@@ -257,15 +281,70 @@ function AdminDashboardContent() {
         </div>
       )}
 
+      {tab === 'payouts' && (
+        <div className="space-y-3">
+          <h2 className="font-semibold mb-4">Seller Payouts</h2>
+          {sellerPayouts.length === 0 ? <p className="text-gray-500 text-sm">No payouts yet.</p> : sellerPayouts.map((p) => (
+            <div key={p.id} className="border rounded-xl p-4 flex justify-between items-center">
+              <div>
+                <p className="font-medium text-sm">{p.sellerName || p.sellerId}</p>
+                <p className="text-xs text-gray-500">{formatDate(p.processedAt)} · {p.notes}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold">{formatINR(p.amount)}</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === 'PROCESSED' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'fraud' && (
+        <div className="space-y-4">
+          <h2 className="font-semibold mb-4">Fraud Queue</h2>
+          {fraudQueue.length === 0 ? <p className="text-sm text-gray-500">No flagged users.</p> : fraudQueue.map((userId) => (
+            <div key={userId} className="border rounded-xl p-4 flex justify-between items-center">
+              <div>
+                <p className="text-sm font-mono text-gray-700">{userId}</p>
+                {impersonateMsg[userId] && <p className="text-xs text-green-600 mt-1">{impersonateMsg[userId]}</p>}
+              </div>
+              <div className="flex gap-2">
+                <button type="button" className="text-sm text-brand border border-brand px-3 py-1.5 rounded-lg hover:bg-brand/5"
+                  onClick={() => impersonate(userId)}>Impersonate</button>
+                <button type="button" className="text-sm text-green-700 border border-green-200 px-3 py-1.5 rounded-lg hover:bg-green-50"
+                  onClick={() => adminApi.clearFraud(userId).then(loadExtendedReports)}>Clear Flag</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {tab === 'reports' && (
-        <div className="border rounded-xl p-6">
-          <h2 className="font-semibold mb-4">Sales (last 30 days)</h2>
-          {salesReport ? (
-            <dl className="grid grid-cols-2 gap-4 text-sm">
-              <div><dt className="text-gray-500">Total sales</dt><dd className="font-bold text-lg">{formatINR(salesReport.totalSales || salesReport.totalRevenue || 0)}</dd></div>
-              <div><dt className="text-gray-500">Orders</dt><dd className="font-bold text-lg">{salesReport.orderCount ?? salesReport.totalOrders ?? '—'}</dd></div>
-            </dl>
-          ) : <p className="text-gray-500">Loading report...</p>}
+        <div className="space-y-6">
+          <div className="border rounded-xl p-6">
+            <h2 className="font-semibold mb-4">Sales (last 30 days)</h2>
+            {salesReport ? (
+              <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div><dt className="text-gray-500">Total sales</dt><dd className="font-bold text-lg">{formatINR(salesReport.totalSales || salesReport.totalRevenue || 0)}</dd></div>
+                <div><dt className="text-gray-500">Orders</dt><dd className="font-bold text-lg">{salesReport.orderCount ?? salesReport.totalOrders ?? '—'}</dd></div>
+                <div><dt className="text-gray-500">Avg order value</dt><dd className="font-bold text-lg">{formatINR(salesReport.avgOrderValue || 0)}</dd></div>
+                <div><dt className="text-gray-500">New users</dt><dd className="font-bold text-lg">{salesReport.newUsers ?? '—'}</dd></div>
+              </dl>
+            ) : <p className="text-gray-500">Loading report...</p>}
+          </div>
+          {topProducts.length > 0 && (
+            <div className="border rounded-xl p-6">
+              <h2 className="font-semibold mb-4">Top Products</h2>
+              <div className="space-y-2">
+                {topProducts.slice(0, 10).map((p, i) => (
+                  <div key={p.id || i} className="flex justify-between text-sm">
+                    <span className="text-gray-700">{i + 1}. {p.name || p.productName}</span>
+                    <span className="font-medium">{p.totalSold || p.orderCount} sold · {formatINR(p.revenue || 0)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

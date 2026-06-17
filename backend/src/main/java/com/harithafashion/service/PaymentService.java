@@ -80,6 +80,20 @@ public class PaymentService {
 
     @Transactional
     public void verifyPayment(String razorpayOrderId, String razorpayPaymentId, String signature) {
+        verifyPayment(razorpayOrderId, razorpayPaymentId, signature, null);
+    }
+
+    @Transactional
+    public void verifyPayment(String razorpayOrderId, String razorpayPaymentId, String signature, UUID callerUserId) {
+        // Ownership check when caller is known
+        if (callerUserId != null) {
+            paymentRepository.findByRazorpayOrderId(razorpayOrderId).ifPresent(payment -> {
+                if (payment.getOrder() != null && payment.getOrder().getUser() != null
+                        && !payment.getOrder().getUser().getId().equals(callerUserId)) {
+                    throw new BadRequestException("Payment not found");
+                }
+            });
+        }
         if (razorpayOrderId != null && razorpayOrderId.startsWith("order_dev_")) {
             markPaymentPaid(razorpayOrderId, razorpayPaymentId != null ? razorpayPaymentId : "pay_dev", signature);
             return;

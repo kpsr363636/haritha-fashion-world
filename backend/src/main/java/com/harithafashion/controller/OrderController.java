@@ -3,6 +3,8 @@ package com.harithafashion.controller;
 import com.harithafashion.dto.request.*;
 import com.harithafashion.dto.response.*;
 import com.harithafashion.entity.Order;
+import com.harithafashion.entity.Shipment;
+import com.harithafashion.repository.ShipmentRepository;
 import com.harithafashion.security.UserPrincipal;
 import com.harithafashion.service.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,6 +29,8 @@ public class OrderController {
     private final OrderService orderService;
     private final InvoiceService invoiceService;
     private final ReturnService returnService;
+    private final ShipmentService shipmentService;
+    private final ShipmentRepository shipmentRepository;
 
     @PostMapping
     public ApiResponse<PlaceOrderResponse> placeOrder(
@@ -77,5 +81,28 @@ public class OrderController {
                                        @AuthenticationPrincipal UserPrincipal principal) {
         orderService.verifyCodOtp(id, principal.getId(), body.get("otp"));
         return ApiResponse.ok(null, "COD verified");
+    }
+
+    @GetMapping("/{id}/tracking")
+    public ApiResponse<List<Map<String, Object>>> tracking(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        // Verify ownership
+        orderService.getOrderDetail(id, principal.getId());
+        List<Shipment> shipments = shipmentRepository.findByOrderId(id);
+        List<Map<String, Object>> result = shipments.stream().map(s -> {
+            Map<String, Object> tracking = shipmentService.trackShipment(s.getAwbNumber());
+            java.util.Map<String, Object> info = new java.util.LinkedHashMap<>();
+            info.put("awb", s.getAwbNumber());
+            info.put("courier", s.getCourierName());
+            info.put("status", s.getStatus());
+            info.put("trackingUrl", s.getTrackingUrl());
+            info.put("estimatedDelivery", s.getEstimatedDelivery());
+            info.put("shippedAt", s.getShippedAt());
+            info.put("deliveredAt", s.getDeliveredAt());
+            info.put("liveTracking", tracking);
+            return info;
+        }).toList();
+        return ApiResponse.ok(result);
     }
 }

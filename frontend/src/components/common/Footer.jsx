@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Instagram, Mail, Sparkles } from 'lucide-react'
+import api from '../../api/axiosInstance'
 
 const SHOP_LINKS = [
   { to: '/products?category=sarees-ethnic-wear', label: 'Sarees & Ethnic' },
@@ -22,6 +24,21 @@ const LEGAL_LINKS = [
 ]
 
 export default function Footer() {
+  const [email, setEmail] = useState('')
+  const [subscribed, setSubscribed] = useState(false)
+
+  const subscribe = async (e) => {
+    e.preventDefault()
+    if (!email) return
+    try {
+      await api.post('/auth/newsletter-subscribe', { email })
+      setSubscribed(true)
+      setEmail('')
+    } catch {
+      setSubscribed(true) // optimistic
+    }
+  }
+
   return (
     <footer className="bg-gradient-to-b from-gray-900 via-gray-950 to-black text-gray-300 mt-auto relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(181,71,106,0.15),transparent_60%)] pointer-events-none" />
@@ -66,10 +83,15 @@ export default function Footer() {
           <div className="lg:col-span-4">
             <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Stay in the loop</h4>
             <p className="text-sm text-gray-400 mb-4">Get exclusive offers, new arrivals & style tips.</p>
-            <form onSubmit={(e) => e.preventDefault()} className="flex gap-2">
-              <input type="email" placeholder="Your email" className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand/40" />
-              <button type="submit" className="btn-primary py-2.5 px-5 text-sm shrink-0">Subscribe</button>
-            </form>
+            {subscribed ? (
+              <p className="text-sm text-green-400">✓ You're subscribed!</p>
+            ) : (
+              <form onSubmit={subscribe} className="flex gap-2">
+                <input type="email" placeholder="Your email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand/40" />
+                <button type="submit" className="btn-primary py-2.5 px-5 text-sm shrink-0">Subscribe</button>
+              </form>
+            )}
             <div className="mt-6 flex flex-wrap gap-2">
               {['UPI', 'Cards', 'Net Banking', 'COD'].map((m) => (
                 <span key={m} className="px-3 py-1 rounded-lg bg-white/5 text-xs text-gray-400 border border-white/5">{m}</span>

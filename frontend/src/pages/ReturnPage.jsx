@@ -21,8 +21,7 @@ export default function ReturnPage() {
     setSEO('Returns & Exchanges', 'Initiate a return or exchange for your Haritha Fashion World order')
     if (isAuthenticated) {
       orderApi.list().then((r) => {
-        const list = r.data?.content || []
-        setOrders(list)
+        const list = (r.data?.content || []).filter((o) => o.status === 'DELIVERED')
         const orderId = searchParams.get('orderId')
         if (orderId) {
           orderApi.get(orderId).then((res) => {
