@@ -30,6 +30,7 @@ public class AdminService {
     private final ShipmentService shipmentService;
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
+    private final SellerPayoutRepository sellerPayoutRepository;
 
     public Map<String, Object> dashboard() {
         Map<String, Object> m = new HashMap<>();
@@ -177,5 +178,9 @@ public class AdminService {
 
     public void clearFraudFlag(UUID userId) {
         redisTemplate.delete("fraud:flag:" + userId);
+    }
+
+    public Page<?> listPayouts(int page, int size) {
+        return sellerPayoutRepository.findAllByOrderByProcessedAtDesc(PageRequest.of(page, size));
     }
 }

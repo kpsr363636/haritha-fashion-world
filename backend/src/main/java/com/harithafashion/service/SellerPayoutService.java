@@ -45,8 +45,8 @@ public class SellerPayoutService {
             seller.setPendingPayout(BigDecimal.ZERO);
             sellerRepository.save(seller);
             if (seller.getUser() != null && seller.getUser().getEmail() != null) {
-                emailService.sendOrderConfirmedEmail(seller.getUser().getEmail(),
-                        seller.getBusinessName(), "Payout processed", amount.toString());
+                emailService.sendSellerPayoutEmail(seller.getUser().getEmail(),
+                        seller.getBusinessName(), amount);
             }
         }
     }

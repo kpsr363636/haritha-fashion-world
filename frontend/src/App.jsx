@@ -1,4 +1,6 @@
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { trackPageView } from './utils/analytics'
 import Navbar from './components/common/Navbar'
 import Footer from './components/common/Footer'
 import HomePage from './pages/HomePage'
@@ -23,12 +25,19 @@ import LegalPage from './pages/legal/LegalPage'
 import SellerDashboardPage from './pages/seller/SellerDashboardPage'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 
+function PageViewTracker() {
+  const location = useLocation()
+  useEffect(() => { trackPageView(location.pathname + location.search) }, [location])
+  return null
+}
+
 export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-page-gradient">
       <div className="promo-strip hidden sm:block">
         Free delivery on orders above ₹499 · New arrivals every week · Use code WELCOME10
       </div>
+      <PageViewTracker />
       <Navbar />
       <main className="flex-1">
         <Routes>

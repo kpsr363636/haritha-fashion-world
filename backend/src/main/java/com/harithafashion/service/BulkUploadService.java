@@ -146,7 +146,8 @@ public class BulkUploadService {
         req.setDescription(requireCellStr(row, idx, "description"));
         req.setCategoryId(resolveCategoryId(getCellStr(row, idx, "category")));
         req.setBasePrice(parseBD(getCellStr(row, idx, "baseprice")));
-        req.setMrp(parseBD(getCellStr(row, idx, "baseprice")));
+        String mrpStr = getCellStr(row, idx, "sellingprice");
+        req.setMrp(parseBD(mrpStr.isBlank() ? getCellStr(row, idx, "baseprice") : mrpStr));
         req.setGstPercent(new BigDecimal(parseIntSafe(getCellStr(row, idx, "gstpercent"), 5)));
         req.setFabric(getCellStr(row, idx, "fabric"));
 
@@ -166,7 +167,8 @@ public class BulkUploadService {
         req.setDescription(requireCsvStr(cols, idx, "description"));
         req.setCategoryId(resolveCategoryId(getCsvStr(cols, idx, "category")));
         req.setBasePrice(parseBD(getCsvStr(cols, idx, "baseprice")));
-        req.setMrp(parseBD(getCsvStr(cols, idx, "baseprice")));
+        String mrpCsv = getCsvStr(cols, idx, "sellingprice");
+        req.setMrp(parseBD(mrpCsv.isBlank() ? getCsvStr(cols, idx, "baseprice") : mrpCsv));
         req.setGstPercent(new BigDecimal(parseIntSafe(getCsvStr(cols, idx, "gstpercent"), 5)));
         req.setFabric(getCsvStr(cols, idx, "fabric"));
 

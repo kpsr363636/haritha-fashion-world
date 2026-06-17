@@ -16,6 +16,7 @@ import LoadingScreen from '../components/ui/LoadingScreen'
 import TrustStrip from '../components/ui/TrustStrip'
 import ImageZoom from '../components/common/ImageZoom'
 import EmiDisplay from '../components/product/EmiDisplay'
+import VideoPlayer from '../components/common/VideoPlayer'
 import { Heart, Star, Truck, RotateCcw, ShieldCheck, MapPin } from 'lucide-react'
 
 export default function ProductDetailPage() {
@@ -109,12 +110,19 @@ export default function ProductDetailPage() {
             />
             {discount > 0 && <span className="discount-badge text-sm">{discount}% OFF</span>}
           </div>
-          {product.images?.length > 1 && (
+          {(product.images?.length > 1 || product.videos?.length > 0) && (
             <div className="flex gap-3 mt-4 overflow-x-auto pb-1">
               {product.images.map((img, i) => (
                 <button key={img.id || i} type="button" onClick={() => setSelectedImage(i)} className={`w-20 h-24 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${selectedImage === i ? 'border-brand shadow-md ring-2 ring-brand/20' : 'border-transparent opacity-70 hover:opacity-100'}`}>
                   <img src={resolveImageUrl(img.imageUrl)} alt="" className="w-full h-full object-cover" onError={imageFallback} />
                 </button>
+              ))}
+            </div>
+          )}
+          {product.videos?.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {product.videos.map((v) => (
+                <VideoPlayer key={v.id} src={v.videoUrl} className="w-full aspect-video" />
               ))}
             </div>
           )}

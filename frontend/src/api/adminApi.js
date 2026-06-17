@@ -30,7 +30,18 @@ export const adminApi = {
   pendingQuestions: (page = 0) => api.get('/admin/questions/pending', { params: { page } }),
   salesReport: (from, to) => api.get('/admin/reports/sales', { params: { from, to } }),
   approveReview: (id) => api.put(`/admin/reviews/${id}/approve`),
-  approveQuestion: (id) => api.put(`/admin/questions/${id}/approve`)
+  approveQuestion: (id) => api.put(`/admin/questions/${id}/approve`),
+  // Payouts
+  sellerPayouts: (page = 0, size = 20) => api.get('/admin/payouts', { params: { page, size } }),
+  // Fraud queue
+  fraudQueue: () => api.get('/admin/fraud/queue'),
+  clearFraud: (userId) => api.delete(`/admin/fraud/queue/${userId}`),
+  // Impersonation
+  impersonateUser: (userId) => api.post(`/admin/users/${userId}/impersonate`),
+  // Extended reports
+  abandonedCartsReport: () => api.get('/admin/reports/abandoned-carts'),
+  topProductsReport: () => api.get('/admin/reports/products/top'),
+  couponsReport: () => api.get('/admin/reports/coupons')
 }
 
 export const sellerApi = {
@@ -48,5 +59,8 @@ export const sellerApi = {
   orders: (page = 0) => api.get('/seller/orders', { params: { page } }),
   payouts: (page = 0) => api.get('/seller/payouts', { params: { page } }),
   replyReview: (reviewId, reply) => api.post(`/seller/reviews/${reviewId}/reply`, { reply }),
-  answerQuestion: (questionId, answer) => api.post(`/seller/questions/${questionId}/answers`, { answer })
+  answerQuestion: (questionId, answer) => api.post(`/seller/questions/${questionId}/answers`, { answer }),
+  addProductImage: (productId, imageUrl) => api.post(`/seller/products/${productId}/images`, { imageUrl, isPrimary: false }),
+  bulkUploadExcel: (formData) => api.post('/seller/bulk-upload/excel', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  bulkUploadCsv: (formData) => api.post('/seller/bulk-upload/csv', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }

@@ -7,7 +7,8 @@ export const orderApi = {
   cancel: (id) => api.post(`/orders/${id}/cancel`),
   invoice: (id) => api.get(`/orders/${id}/invoice`, { responseType: 'blob' }),
   initiateReturn: (orderId, itemId, data) => api.post(`/orders/${orderId}/items/${itemId}/return`, data),
-  verifyCod: (orderId, otp) => api.post(`/orders/${orderId}/cod-verify`, { otp })
+  verifyCod: (orderId, otp) => api.post(`/orders/${orderId}/cod-verify`, { otp }),
+  tracking: (id) => api.get(`/orders/${id}/tracking`)
 }
 
 export const paymentApi = {

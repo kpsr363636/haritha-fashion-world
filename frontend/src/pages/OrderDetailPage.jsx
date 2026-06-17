@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Download, Package, MapPin, CreditCard, ArrowLeft } from 'lucide-react'
+import { Download, Package, MapPin, CreditCard, ArrowLeft, Truck, ExternalLink } from 'lucide-react'
 import { orderApi } from '../api/orderApi'
 import { formatINR, formatDate } from '../utils/formatters'
 import ProtectedRoute from '../components/common/ProtectedRoute'
@@ -14,9 +14,14 @@ function OrderDetailContent() {
   const [loading, setLoading] = useState(true)
   const [codOtp, setCodOtp] = useState('')
   const [codMsg, setCodMsg] = useState('')
+  const [tracking, setTracking] = useState(null)
 
   const load = () => {
     orderApi.get(id).then((r) => setOrder(r.data)).catch(() => setOrder(null)).finally(() => setLoading(false))
+  }
+
+  const loadTracking = () => {
+    orderApi.tracking?.(id).then((r) => setTracking(r.data)).catch(() => {})
   }
 
   useEffect(() => { load() }, [id])
@@ -85,6 +90,46 @@ function OrderDetailContent() {
       </div>
 
       <OrderTimeline status={order.status} />
+
+      {['SHIPPED', 'DELIVERED', 'OUT_FOR_DELIVERY'].includes(order.status) && (
+        <div className="surface-card p-5 md:p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Truck className="w-5 h-5 text-brand" />
+              <h2 className="font-semibold">Shipment Tracking</h2>
+            </div>
+            <button type="button" onClick={loadTracking} className="text-sm text-brand hover:underline">
+              Refresh tracking
+            </button>
+          </div>
+          {tracking ? (
+            <div className="space-y-3">
+              {tracking.map((t, i) => (
+                <div key={i} className="border rounded-xl p-4 text-sm">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium">AWB: {t.awb}</p>
+                      <p className="text-gray-500">{t.courier} · Status: {t.status}</p>
+                      {t.estimatedDelivery && <p className="text-gray-500 text-xs mt-1">Est. delivery: {formatDate(t.estimatedDelivery)}</p>}
+                    </div>
+                    {t.trackingUrl && (
+                      <a href={t.trackingUrl} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 text-brand text-xs font-medium hover:underline">
+                        Track <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <button type="button" onClick={loadTracking}
+              className="text-sm text-brand border border-brand/30 px-4 py-2 rounded-xl hover:bg-brand/5 transition-colors">
+              Load live tracking
+            </button>
+          )}
+        </div>
+      )}
 
       {order.requiresCodVerification && (
         <form onSubmit={verifyCod} className="surface-card p-5 md:p-6 mb-6 border-amber-200/60 bg-gradient-to-br from-amber-50/80 to-white">

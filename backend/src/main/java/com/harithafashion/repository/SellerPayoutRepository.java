@@ -28,6 +28,8 @@ public interface SellerPayoutRepository extends JpaRepository<SellerPayout, UUID
 
     Optional<SellerPayout> findByRazorpayPayoutId(String razorpayPayoutId);
 
+    Page<SellerPayout> findAllByOrderByProcessedAtDesc(Pageable pageable);
+
     @Query("SELECT COALESCE(SUM(sp.amount), 0) FROM SellerPayout sp WHERE sp.seller.id = :sellerId AND sp.status = :status")
     BigDecimal sumAmountBySellerIdAndStatus(@Param("sellerId") UUID sellerId, @Param("status") String status);
 }

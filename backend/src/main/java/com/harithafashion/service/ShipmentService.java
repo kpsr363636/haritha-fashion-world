@@ -360,4 +360,42 @@ public class ShipmentService {
         Map<String, Object> snap = order.getAddressSnapshot();
         return snap != null ? String.valueOf(snap.getOrDefault(key, "")) : "";
     }
+
+    /** Called by Shiprocket webhook to update shipment status. */
+    @Transactional
+    public void handleShiprocketWebhook(Map<String, Object> payload) {
+        try {
+            String event = String.valueOf(payload.getOrDefault("event", ""));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) payload.getOrDefault("data", Map.of());
+            String awb = String.valueOf(data.getOrDefault("awb_code", ""));
+            if (awb.isBlank()) return;
+
+            shipmentRepository.findByAwbNumber(awb).ifPresent(shipment -> {
+                Order order = shipment.getOrder();
+                switch (event) {
+                    case "SHIPPED" -> {
+                        shipment.setStatus("SHIPPED");
+                        order.setStatus(OrderStatus.SHIPPED);
+                        shipmentRepository.save(shipment);
+                        orderRepository.save(order);
+                    }
+                    case "DELIVERED" -> {
+                        shipment.setStatus("DELIVERED");
+                        shipment.setDeliveredAt(java.time.LocalDateTime.now());
+                        order.setStatus(OrderStatus.DELIVERED);
+                        shipmentRepository.save(shipment);
+                        orderRepository.save(order);
+                    }
+                    case "RTO_INITIATED", "RTO" -> {
+                        shipment.setStatus("RTO");
+                        shipmentRepository.save(shipment);
+                    }
+                    default -> log.debug("Unhandled Shiprocket event: {}", event);
+                }
+            });
+        } catch (Exception e) {
+            log.error("Error processing Shiprocket webhook", e);
+        }
+    }
 }
