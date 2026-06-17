@@ -34,7 +34,14 @@ export default function CheckoutPage() {
   const [giftCardBalance, setGiftCardBalance] = useState(null)
   const [couponDiscount, setCouponDiscount] = useState(null)
   const [couponMsg, setCouponMsg] = useState('')
+  const [useLoyalty, setUseLoyalty] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  const userPoints = user?.loyaltyPoints || 0
+  const pointsValue = Math.floor(userPoints * 0.10) // ₹0.10 per point
+  const maxLoyaltyDiscount = cart ? Math.floor((cart.total || 0) * 0.10) : 0 // max 10% of order
+  const loyaltyDiscount = useLoyalty ? Math.min(pointsValue, maxLoyaltyDiscount) : 0
+  const loyaltyPointsToUse = loyaltyDiscount ? Math.ceil(loyaltyDiscount / 0.10) : 0
 
   const loadAddresses = () => {
     addressApi.list().then((r) => {
@@ -101,7 +108,8 @@ export default function CheckoutPage() {
         addressId: selectedAddress,
         paymentMethod: paymentMethod === 'COD' ? 'COD' : 'ONLINE',
         couponCode: couponCode.trim() || undefined,
-        giftCardCode: giftCardCode.trim() || undefined
+        giftCardCode: giftCardCode.trim() || undefined,
+        loyaltyPointsToUse: loyaltyPointsToUse || undefined
       })
       const order = res.data
       if (order.requiresPayment && order.razorpayOrderId) {
@@ -236,6 +244,29 @@ export default function CheckoutPage() {
             </div>
             {giftCardBalance != null && <p className="text-sm text-emerald-600 mt-2 font-medium">Gift card balance: {formatINR(giftCardBalance)}</p>}
           </section>
+
+          {/* Loyalty Points */}
+          {userPoints > 0 && (
+            <section className="surface-card p-6">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">Use Loyalty Points</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {userPoints.toLocaleString()} pts = {formatINR(pointsValue)} (max {formatINR(maxLoyaltyDiscount)} on this order)
+                  </p>
+                </div>
+                <div className="relative">
+                  <input type="checkbox" className="sr-only" checked={useLoyalty} onChange={() => setUseLoyalty(v => !v)} />
+                  <div className={`w-11 h-6 rounded-full transition-colors ${useLoyalty ? 'bg-brand' : 'bg-gray-200'}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-0.5 transition-transform ${useLoyalty ? 'translate-x-5.5' : 'translate-x-0.5'}`} />
+                  </div>
+                </div>
+              </label>
+              {useLoyalty && loyaltyDiscount > 0 && (
+                <p className="text-emerald-600 text-xs mt-2 font-medium">−{formatINR(loyaltyDiscount)} deducted using {loyaltyPointsToUse} pts</p>
+              )}
+            </section>
+          )}
         </div>
 
         <div className="lg:col-span-2">
@@ -247,9 +278,10 @@ export default function CheckoutPage() {
                 <div className="flex justify-between"><span className="text-gray-500">GST</span><span>{formatINR(cart.gstAmount)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Delivery</span><span className={cart.freeDelivery ? 'text-emerald-600' : ''}>{cart.freeDelivery ? 'FREE' : formatINR(cart.deliveryCharge)}</span></div>
                 {couponDiscount > 0 && <div className="flex justify-between text-emerald-600"><span>Coupon</span><span>−{formatINR(couponDiscount)}</span></div>}
+                {loyaltyDiscount > 0 && <div className="flex justify-between text-emerald-600"><span>Loyalty pts</span><span>−{formatINR(loyaltyDiscount)}</span></div>}
                 <div className="flex justify-between font-bold text-xl pt-4 border-t">
                   <span>Total</span>
-                  <span className="text-brand">{formatINR(estimatedTotal)}</span>
+                  <span className="text-brand">{formatINR(Math.max(0, estimatedTotal - loyaltyDiscount))}</span>
                 </div>
               </div>
             )}

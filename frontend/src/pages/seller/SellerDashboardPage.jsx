@@ -7,7 +7,8 @@ import ProtectedRoute from '../../components/common/ProtectedRoute'
 import BulkUploadModal from '../../components/seller/BulkUploadModal'
 import { useAuth } from '../../context/AuthContext'
 import { formatINR, formatDate } from '../../utils/formatters'
-import { Upload, Image } from 'lucide-react'
+import { Upload, Image, Package, Printer, CheckCircle } from 'lucide-react'
+import api from '../../api/axiosInstance'
 
 function SellerRegisterForm({ onDone }) {
   const { login, user, token } = useAuth()
@@ -33,6 +34,90 @@ function SellerRegisterForm({ onDone }) {
       <input className="input-field" placeholder="IFSC" value={form.ifscCode} onChange={(e) => setForm({ ...form, ifscCode: e.target.value })} />
       <button type="submit" className="btn-primary sm:col-span-2">Apply as Seller</button>
     </form>
+  )
+}
+
+function SellerOrdersTab({ orders, onRefresh }) {
+  const [actionId, setActionId] = useState(null)
+
+  const markPacked = async (itemId) => {
+    setActionId(itemId)
+    try {
+      await api.put(`/seller/orders/${itemId}/status`, { status: 'PACKED' })
+      onRefresh()
+    } catch (err) {
+      alert(err.message || 'Could not update status')
+    } finally {
+      setActionId(null)
+    }
+  }
+
+  const printLabel = async (itemId) => {
+    try {
+      const res = await api.get(`/seller/shipments/${itemId}/label`)
+      if (res.data?.labelUrl) {
+        window.open(res.data.labelUrl, '_blank')
+      } else {
+        alert('Label not ready yet. Shipment may still be creating.')
+      }
+    } catch {
+      alert('Could not fetch shipping label. Try again in a few minutes.')
+    }
+  }
+
+  const STATUS_COLORS = {
+    PLACED: 'bg-blue-50 text-blue-700', CONFIRMED: 'bg-blue-50 text-blue-700',
+    PACKED: 'bg-amber-50 text-amber-700', SHIPPED: 'bg-purple-50 text-purple-700',
+    DELIVERED: 'bg-emerald-50 text-emerald-700', CANCELLED: 'bg-red-50 text-red-600'
+  }
+
+  if (orders.length === 0) return <p className="text-gray-500 text-sm">No orders yet.</p>
+
+  return (
+    <div className="space-y-3">
+      {orders.map((o) => (
+        <div key={o.id} className="surface-card p-4 md:p-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className="font-semibold text-gray-900">{o.orderNumber}</p>
+              <p className="text-sm text-gray-600 mt-0.5">{o.productName} · {o.variantInfo} · Qty {o.quantity}</p>
+              <p className="text-sm font-medium text-brand mt-1">{formatINR(o.totalPrice)}</p>
+              <p className="text-xs text-gray-400 mt-1">{formatDate(o.placedAt)}</p>
+            </div>
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-600'}`}>
+              {o.status}
+            </span>
+          </div>
+          {/* Customer address */}
+          {o.customerAddress && (
+            <p className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded-lg">
+              📍 {o.customerAddress}
+            </p>
+          )}
+          {/* Actions */}
+          <div className="flex gap-2 mt-3 flex-wrap">
+            {(o.status === 'PLACED' || o.status === 'CONFIRMED') && (
+              <button onClick={() => markPacked(o.id)} disabled={actionId === o.id}
+                className="flex items-center gap-1.5 text-xs btn-outline py-2 px-3">
+                <Package size={13} />
+                {actionId === o.id ? 'Marking...' : 'Mark Packed'}
+              </button>
+            )}
+            {(o.status === 'PACKED' || o.status === 'SHIPPED') && (
+              <button onClick={() => printLabel(o.id)}
+                className="flex items-center gap-1.5 text-xs btn-primary py-2 px-3">
+                <Printer size={13} /> Print Label
+              </button>
+            )}
+            {o.status === 'DELIVERED' && (
+              <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                <CheckCircle size={13} /> Delivered
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -254,15 +339,9 @@ function SellerDashboardContent() {
       )}
 
       {tab === 'orders' && (
-        <div className="space-y-3">
-          {orders.map((o) => (
-            <div key={o.id} className="surface-card p-4 md:p-5">
-              <p className="font-medium">{o.orderNumber}</p>
-              <p className="text-sm text-gray-500">{o.productName} · Qty {o.quantity} · {formatINR(o.totalPrice)}</p>
-              <p className="text-xs text-gray-400">{formatDate(o.placedAt)} · {o.status}</p>
-            </div>
-          ))}
-        </div>
+        <SellerOrdersTab orders={orders} onRefresh={() => {
+          sellerApi.getOrders().then((r) => setOrders(r.data?.content || r.data || [])).catch(() => {})
+        }} />
       )}
 
       {tab === 'payouts' && (

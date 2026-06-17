@@ -59,4 +59,17 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.status <> com.harithafashion.entity.enums.OrderStatus.CANCELLED")
     BigDecimal sumTotalRevenue();
+
+    @Query("SELECT COUNT(DISTINCT o.id) FROM Order o JOIN o.items oi WHERE oi.seller.id = :sellerId AND o.status = 'DELIVERED' AND o.placedAt >= :since")
+    long countDeliveredBySellerId(@Param("sellerId") UUID sellerId, @Param("since") LocalDateTime since);
+
+    @Query("SELECT COUNT(DISTINCT o.id) FROM Order o JOIN o.items oi WHERE oi.seller.id = :sellerId AND o.status = 'CANCELLED' AND o.placedAt >= :since")
+    long countCancelledBySellerId(@Param("sellerId") UUID sellerId, @Param("since") LocalDateTime since);
+
+    @Query("SELECT o FROM Order o WHERE o.paymentStatus = 'PAID' AND NOT EXISTS (SELECT s FROM Shipment s WHERE s.order.id = o.id) AND o.placedAt >= :since")
+    List<Order> findPaidOrdersWithoutShipment(@Param("since") LocalDateTime since);
+
+    default List<Order> findPaidOrdersWithoutShipment() {
+        return findPaidOrdersWithoutShipment(LocalDateTime.now().minusDays(3));
+    }
 }

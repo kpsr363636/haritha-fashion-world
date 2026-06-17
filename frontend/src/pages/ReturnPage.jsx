@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Upload, X, ImageIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { orderApi } from '../api/orderApi'
 import { formatINR, formatDate } from '../utils/formatters'
 import { setSEO } from '../utils/seo'
+import { uploadApi } from '../api/uploadApi'
 
 export default function ReturnPage() {
   const { isAuthenticated } = useAuth()
@@ -14,8 +16,11 @@ export default function ReturnPage() {
   const [returnType, setReturnType] = useState('RETURN')
   const [reason, setReason] = useState('Size issue')
   const [description, setDescription] = useState('')
+  const [photos, setPhotos] = useState([]) // {file, previewUrl, s3Url}
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const photoInputRef = useRef()
 
   useEffect(() => {
     setSEO('Returns & Exchanges', 'Initiate a return or exchange for your Haritha Fashion World order')
@@ -32,15 +37,37 @@ export default function ReturnPage() {
     }
   }, [isAuthenticated, searchParams])
 
+  const handlePhotoSelect = async (e) => {
+    const files = Array.from(e.target.files).slice(0, 4 - photos.length)
+    if (!files.length) return
+    setUploadingPhotos(true)
+    const newPhotos = []
+    for (const file of files) {
+      const previewUrl = URL.createObjectURL(file)
+      try {
+        const s3Url = await uploadApi.uploadToS3(file)
+        newPhotos.push({ file, previewUrl, s3Url })
+      } catch {
+        newPhotos.push({ file, previewUrl, s3Url: null })
+      }
+    }
+    setPhotos(p => [...p, ...newPhotos])
+    setUploadingPhotos(false)
+  }
+
+  const removePhoto = (idx) => setPhotos(p => p.filter((_, i) => i !== idx))
+
   const submitReturn = async (e) => {
     e.preventDefault()
     if (!selectedOrder || !selectedItem) return
     setSubmitting(true)
     try {
+      const imageUrls = photos.filter(p => p.s3Url).map(p => p.s3Url)
       await orderApi.initiateReturn(selectedOrder.id, selectedItem.id, {
         returnType,
         reason,
-        description
+        description,
+        images: imageUrls
       })
       setSuccess(true)
     } catch (err) {
@@ -126,8 +153,41 @@ export default function ReturnPage() {
 
         <textarea className="input-field h-24" placeholder="Additional details (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
 
-        <button type="submit" disabled={submitting || !selectedItem} className="btn-primary w-full">
-          {submitting ? 'Submitting...' : 'Submit Request'}
+        {/* Photo upload */}
+        <div>
+          <label className="block text-sm font-medium mb-2 flex items-center gap-1">
+            <ImageIcon size={14} /> Photos (up to 4) — helps speed up your return
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {photos.map((p, i) => (
+              <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200">
+                <img src={p.previewUrl} alt="" className="w-full h-full object-cover" />
+                {!p.s3Url && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <span className="text-white text-xs">Uploading...</span>
+                  </div>
+                )}
+                <button type="button" onClick={() => removePhoto(i)}
+                  className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center">
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+            {photos.length < 4 && (
+              <button type="button" onClick={() => photoInputRef.current?.click()}
+                disabled={uploadingPhotos}
+                className="w-20 h-20 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-brand hover:text-brand transition-colors text-xs gap-1">
+                <Upload size={18} />
+                <span>Add photo</span>
+              </button>
+            )}
+          </div>
+          <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={handlePhotoSelect} />
+        </div>
+
+        <button type="submit" disabled={submitting || !selectedItem || uploadingPhotos} className="btn-primary w-full">
+          {submitting ? 'Submitting...' : uploadingPhotos ? 'Uploading photos...' : 'Submit Request'}
         </button>
       </form>
     </div>

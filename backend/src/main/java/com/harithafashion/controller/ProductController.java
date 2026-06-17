@@ -47,6 +47,11 @@ public class ProductController {
         return ApiResponse.ok(productService.getNewArrivals());
     }
 
+    @GetMapping("/on-sale")
+    public ApiResponse<List<ProductCardResponse>> onSale() {
+        return ApiResponse.ok(productService.getOnSale());
+    }
+
     @GetMapping("/{slug}")
     public ApiResponse<ProductDetailResponse> getBySlug(@PathVariable String slug,
                                                         @AuthenticationPrincipal UserPrincipal principal) {

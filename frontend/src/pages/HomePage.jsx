@@ -14,6 +14,7 @@ export default function HomePage() {
   const { isAuthenticated } = useAuth()
   const [featured, setFeatured] = useState([])
   const [newArrivals, setNewArrivals] = useState([])
+  const [onSale, setOnSale] = useState([])
   const [recentlyViewed, setRecentlyViewed] = useState([])
   const [categories, setCategories] = useState([])
   const [banners, setBanners] = useState([])
@@ -21,10 +22,13 @@ export default function HomePage() {
 
   useEffect(() => {
     setSEO('Home', "Shop sarees, ethnic wear, jewellery & beauty at Haritha Fashion World")
-    productApi.featured().then((r) => setFeatured(r.data || [])).catch(() => {})
-    productApi.newArrivals().then((r) => setNewArrivals(r.data || [])).catch(() => {})
-    categoryApi.getTree().then((r) => setCategories(r.data || [])).catch(() => {})
-    discoveryApi.banners().then((r) => setBanners(r.data || [])).catch(() => {})
+    Promise.all([
+      productApi.featured().then((r) => setFeatured(r.data || [])),
+      productApi.newArrivals().then((r) => setNewArrivals(r.data || [])),
+      productApi.onSale ? productApi.onSale().then((r) => setOnSale(r.data || [])) : Promise.resolve(),
+      categoryApi.getTree().then((r) => setCategories(r.data || [])),
+      discoveryApi.banners().then((r) => setBanners(r.data || []))
+    ]).catch(() => {})
     if (isAuthenticated) {
       discoveryApi.recentlyViewed().then((r) => setRecentlyViewed(r.data || [])).catch(() => {})
     }
@@ -115,10 +119,22 @@ export default function HomePage() {
       )}
 
       {newArrivals.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-10 md:py-20 pb-24">
+        <section className="max-w-7xl mx-auto px-4 py-10 md:py-16">
           <SectionHeader eyebrow="Just dropped" title="New Arrivals" linkLabel="Explore" linkTo="/products?sort=NEWEST" />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {newArrivals.map((p) => <ProductCard key={p.id} product={p} />)}
+          </div>
+        </section>
+      )}
+
+      {onSale.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 py-10 md:py-16 pb-24">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-full uppercase tracking-wide animate-pulse">Sale</span>
+          </div>
+          <SectionHeader eyebrow="Limited time" title="On Sale Now" linkLabel="View all" linkTo="/products?sort=POPULAR&inStock=true" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {onSale.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
         </section>
       )}

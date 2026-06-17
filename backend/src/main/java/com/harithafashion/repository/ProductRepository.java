@@ -59,4 +59,11 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             @Param("minRating") BigDecimal minRating,
             @Param("sortBy") String sortBy,
             Pageable pageable);
+
+    @Query("SELECT p FROM Product p WHERE p.discountPercent > :minDiscount AND p.status = :status ORDER BY p.discountPercent DESC")
+    List<Product> findByDiscountPercentGreaterThanAndStatus(@Param("minDiscount") int minDiscount, @Param("status") ProductStatus status, org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT p FROM Product p WHERE p.status = 'ACTIVE' AND NOT EXISTS " +
+           "(SELECT v FROM ProductVariant v WHERE v.product = p AND v.stockQuantity > 0)")
+    List<Product> findProductsWithAllVariantsZeroStock();
 }

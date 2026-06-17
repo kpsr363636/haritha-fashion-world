@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/authApi'
 import { useAuth } from '../context/AuthContext'
 import { trackEvent } from '../utils/analytics'
 import AuthLayout from '../components/common/AuthLayout'
+import OtpInput from '../components/common/OtpInput'
 
 function GoogleIcon() {
   return (
@@ -21,6 +22,7 @@ export default function LoginPage() {
   const [mobile, setMobile] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
+  const [countdown, setCountdown] = useState(0)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -28,13 +30,24 @@ export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  useEffect(() => {
+    if (countdown <= 0) return
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [countdown])
+
+  useEffect(() => {
+    if (otp.length === 6 && otpSent) doVerifyOtp()
+  }, [otp])
+
   const handleSendOtp = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+    e?.preventDefault()
+    if (mobile.length !== 10) { setError('Enter valid 10-digit mobile'); return }
+    setLoading(true); setError('')
     try {
       await authApi.sendOtp(mobile)
       setOtpSent(true)
+      setCountdown(60)
     } catch (err) {
       setError(err.message || 'Failed to send OTP')
     } finally {
@@ -42,9 +55,9 @@ export default function LoginPage() {
     }
   }
 
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+  const doVerifyOtp = async () => {
+    if (otp.length !== 6) return
+    setLoading(true); setError('')
     try {
       const res = await authApi.verifyOtp(mobile, otp)
       login(res.data)
@@ -52,8 +65,35 @@ export default function LoginPage() {
       navigate('/')
     } catch (err) {
       setError(err.message || 'Invalid OTP')
+      setOtp('')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGoogleLogin = async () => {
+    // Use Google Identity Services if client ID available, else fallback to redirect
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (clientId && window.google?.accounts?.id) {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          try {
+            setLoading(true)
+            const res = await authApi.googleLogin(response.credential)
+            login(res.data)
+            trackEvent('login', { method: 'google' })
+            navigate('/')
+          } catch (err) {
+            setError(err.message || 'Google login failed')
+          } finally {
+            setLoading(false)
+          }
+        }
+      })
+      window.google.accounts.id.prompt()
+    } else {
+      window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/auth/google`
     }
   }
 
@@ -84,16 +124,32 @@ export default function LoginPage() {
       {mode === 'otp' ? (
         !otpSent ? (
           <form onSubmit={handleSendOtp} className="space-y-4">
-            <input type="tel" placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} className="input-field" maxLength={10} required />
-            <button type="submit" disabled={loading} className="btn-primary w-full">{loading ? 'Sending...' : 'Send OTP'}</button>
+            <div className="flex">
+              <span className="flex items-center px-3 bg-gray-50 border border-r-0 border-gray-300 rounded-l-xl text-sm text-gray-500">+91</span>
+              <input type="tel" placeholder="10-digit mobile" value={mobile}
+                onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))}
+                className="input-field rounded-l-none flex-1" maxLength={10} required />
+            </div>
+            <button type="submit" disabled={loading || mobile.length !== 10} className="btn-primary w-full">
+              {loading ? 'Sending...' : 'Send OTP'}
+            </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <p className="text-sm text-gray-500">OTP sent to +91 {mobile}</p>
-            <input type="text" placeholder="Enter 6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value)} className="input-field" maxLength={6} required />
-            <button type="submit" disabled={loading} className="btn-primary w-full">{loading ? 'Verifying...' : 'Verify & Login'}</button>
-            <button type="button" onClick={() => setOtpSent(false)} className="text-sm text-brand w-full">Change number</button>
-          </form>
+          <div className="space-y-5">
+            <p className="text-center text-sm text-gray-600">
+              OTP sent to <span className="font-semibold">+91 {mobile}</span>
+              <button onClick={() => { setOtpSent(false); setOtp('') }} className="ml-2 text-brand text-xs underline">Change</button>
+            </p>
+            <OtpInput value={otp} onChange={setOtp} disabled={loading} />
+            <button onClick={doVerifyOtp} disabled={loading || otp.length !== 6} className="btn-primary w-full">
+              {loading ? 'Verifying...' : 'Verify & Login'}
+            </button>
+            <div className="text-center text-sm text-gray-500">
+              {countdown > 0
+                ? <span>Resend in <span className="font-semibold text-brand">{countdown}s</span></span>
+                : <button onClick={handleSendOtp} className="text-brand font-medium">Resend OTP</button>}
+            </div>
+          </div>
         )
       ) : (
         <form onSubmit={handleEmailLogin} className="space-y-4">
@@ -113,11 +169,9 @@ export default function LoginPage() {
 
       <button
         type="button"
-        onClick={() => {
-          // Google OAuth redirect
-          window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/auth/google`
-        }}
-        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors"
+        onClick={handleGoogleLogin}
+        disabled={loading}
+        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
       >
         <GoogleIcon />
         Continue with Google

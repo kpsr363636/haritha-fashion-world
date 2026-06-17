@@ -4,6 +4,7 @@ import com.harithafashion.dto.request.*;
 import com.harithafashion.dto.response.AuthResponse;
 import com.harithafashion.dto.response.UserResponse;
 import com.harithafashion.entity.*;
+import com.harithafashion.entity.enums.CouponType;
 import com.harithafashion.entity.enums.UserRole;
 import com.harithafashion.exception.BadRequestException;
 import com.harithafashion.exception.UnauthorizedException;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -32,6 +34,7 @@ public class AuthService {
     private final WishlistRepository wishlistRepository;
     private final NotificationPreferenceRepository notificationPreferenceRepository;
     private final ReferralRepository referralRepository;
+    private final CouponRepository couponRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
@@ -211,6 +214,28 @@ public class AuthService {
         cartRepository.save(Cart.builder().user(user).build());
         wishlistRepository.save(Wishlist.builder().user(user).build());
         notificationPreferenceRepository.save(NotificationPreference.builder().user(user).build());
+        createWelcomeCoupon(user);
+    }
+
+    private void createWelcomeCoupon(User user) {
+        // Per-user WELCOME10 code: WELCOME10-{6-char suffix} so each user gets their own
+        String code = "WELCOME10-" + user.getId().toString().replace("-", "").substring(0, 6).toUpperCase();
+        if (!couponRepository.existsByCode(code)) {
+            couponRepository.save(Coupon.builder()
+                    .code(code)
+                    .description("Welcome offer — 10% off your first order")
+                    .type(CouponType.PERCENTAGE)
+                    .discountValue(new BigDecimal("10"))
+                    .maxDiscountAmount(new BigDecimal("200"))
+                    .minOrderAmount(new BigDecimal("499"))
+                    .isFirstOrderOnly(true)
+                    .perUserLimit(1)
+                    .usageLimit(1)
+                    .validFrom(LocalDateTime.now())
+                    .validUntil(LocalDateTime.now().plusDays(30))
+                    .isActive(true)
+                    .build());
+        }
     }
 
     private void applyReferral(User referee, String referralCode) {

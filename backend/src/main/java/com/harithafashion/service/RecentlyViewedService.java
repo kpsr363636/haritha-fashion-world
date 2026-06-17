@@ -18,9 +18,10 @@ public class RecentlyViewedService {
     private final ProductService productService;
 
     public List<ProductCardResponse> getRecentlyViewed(UUID userId) {
-        String key = "recently_viewed:user:" + userId;
-        List<String> ids = redisTemplate.opsForList().range(key, 0, 9);
-        if (ids == null) return List.of();
+        String key = "VIEWED:" + userId;
+        // ZREVRANGE: highest score (most recent timestamp) first, top 10
+        java.util.Set<String> ids = redisTemplate.opsForZSet().reverseRange(key, 0, 9);
+        if (ids == null || ids.isEmpty()) return List.of();
         List<ProductCardResponse> result = new ArrayList<>();
         for (String id : ids) {
             try {
@@ -31,9 +32,11 @@ public class RecentlyViewedService {
     }
 
     public void trackView(UUID userId, UUID productId) {
-        String key = "recently_viewed:user:" + userId;
-        redisTemplate.opsForList().remove(key, 0, productId.toString());
-        redisTemplate.opsForList().leftPush(key, productId.toString());
-        redisTemplate.opsForList().trim(key, 0, 9);
+        String key = "VIEWED:" + userId;
+        double score = System.currentTimeMillis();
+        redisTemplate.opsForZSet().add(key, productId.toString(), score);
+        // Keep only top 10 most recent (remove oldest beyond rank 9)
+        redisTemplate.opsForZSet().removeRange(key, 0, -11);
+        redisTemplate.expire(key, 30, java.util.concurrent.TimeUnit.DAYS);
     }
 }

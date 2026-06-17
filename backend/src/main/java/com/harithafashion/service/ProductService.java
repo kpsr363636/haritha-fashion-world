@@ -87,6 +87,12 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
+    public List<ProductCardResponse> getOnSale() {
+        return productRepository.findByDiscountPercentGreaterThanAndStatus(0, ProductStatus.ACTIVE, PageRequest.of(0, 8))
+                .stream().map(this::toCard).toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<ProductCardResponse> getCompleteTheLook(UUID productId) {
         List<Product> suggestions = completeTheLookRepository
                 .findByPrimaryProductIdOrderBySortOrderAsc(productId)

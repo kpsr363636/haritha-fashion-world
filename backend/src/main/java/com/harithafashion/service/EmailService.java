@@ -103,6 +103,20 @@ public class EmailService {
         send(email, "Your order has shipped", "order-shipped", ctx);
     }
 
+    @Async
+    public void sendLowStockEmail(String email, String sellerName, String productName,
+                                   String size, String color, int qty) {
+        Context ctx = ctx("name", sellerName, "productName", productName,
+                "size", size != null ? size : "", "color", color != null ? color : "", "qty", String.valueOf(qty));
+        send(email, "Low stock alert: " + productName, "back-in-stock", ctx);
+    }
+
+    @Async
+    public void sendLoyaltyPointsExpiredEmail(String email, String name, int points) {
+        Context ctx = ctx("name", name, "points", String.valueOf(points));
+        send(email, "Your loyalty points have expired", "welcome", ctx); // reuse welcome template as placeholder
+    }
+
     private Context ctx(Object... kv) {
         Context c = new Context();
         for (int i = 0; i < kv.length; i += 2) {

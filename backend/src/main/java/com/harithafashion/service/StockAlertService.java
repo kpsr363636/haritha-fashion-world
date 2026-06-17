@@ -41,4 +41,30 @@ public class StockAlertService {
             stockAlertRepository.save(alert);
         });
     }
+
+    @Transactional
+    public void sendLowStockAlerts() {
+        // Find variants with stock <= 5, notify seller
+        variantRepository.findLowStockVariants(5).forEach(variant -> {
+            Product product = variant.getProduct();
+            if (product.getSeller() != null && product.getSeller().getUser() != null
+                    && product.getSeller().getUser().getEmail() != null) {
+                emailService.sendLowStockEmail(
+                        product.getSeller().getUser().getEmail(),
+                        product.getSeller().getBusinessName(),
+                        product.getName(),
+                        variant.getSize(),
+                        variant.getColor(),
+                        variant.getStockQuantity());
+            }
+        });
+    }
+
+    @Transactional
+    public void autoDelistZeroStockProducts() {
+        productRepository.findProductsWithAllVariantsZeroStock().forEach(product -> {
+            product.setStatus(com.harithafashion.entity.enums.ProductStatus.OUT_OF_STOCK);
+            productRepository.save(product);
+        });
+    }
 }

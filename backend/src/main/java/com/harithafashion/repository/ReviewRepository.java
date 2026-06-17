@@ -37,4 +37,7 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
     @Query("SELECT r FROM Review r WHERE r.product.seller.id = :sellerId AND r.isApproved = true ORDER BY r.createdAt DESC")
     Page<Review> findBySellerId(@Param("sellerId") UUID sellerId, Pageable pageable);
+
+    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.product.seller.id = :sellerId AND r.isApproved = true")
+    Double findAverageRatingBySellerId(@Param("sellerId") UUID sellerId);
 }

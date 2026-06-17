@@ -7,18 +7,23 @@ import com.harithafashion.exception.ResourceNotFoundException;
 import com.harithafashion.repository.*;
 import com.harithafashion.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AdminService {
 
     private final OrderRepository orderRepository;
@@ -31,6 +36,12 @@ public class AdminService {
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
     private final SellerPayoutRepository sellerPayoutRepository;
+
+    @Value("${razorpay.key-id:}")
+    private String razorpayKeyId;
+
+    @Value("${razorpay.key-secret:}")
+    private String razorpayKeySecret;
 
     public Map<String, Object> dashboard() {
         Map<String, Object> m = new HashMap<>();
@@ -88,11 +99,64 @@ public class AdminService {
     public Seller approveSeller(UUID id) {
         Seller s = sellerRepository.findById(id).orElseThrow();
         s.setStatus(SellerStatus.APPROVED);
+        s.setKycVerified(true);
         s = sellerRepository.save(s);
-        if (s.getUser().getEmail() != null) {
-            emailService.sendSellerStatusEmail(s.getUser().getEmail(), s.getUser().getName(), "APPROVED");
+        // Update user role to SELLER
+        User u = s.getUser();
+        u.setRole(UserRole.SELLER);
+        userRepository.save(u);
+        // Create Razorpay X contact + fund account if keys available
+        if (!razorpayKeyId.isBlank() && !razorpayKeySecret.isBlank()
+                && s.getRazorpayContactId() == null
+                && s.getBankAccountNumber() != null) {
+            createRazorpayXContact(s);
+        }
+        if (u.getEmail() != null) {
+            emailService.sendSellerStatusEmail(u.getEmail(), u.getName(), "APPROVED");
         }
         return s;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void createRazorpayXContact(Seller s) {
+        try {
+            WebClient client = WebClient.builder()
+                    .baseUrl("https://api.razorpay.com/v1")
+                    .defaultHeaders(h -> h.setBasicAuth(razorpayKeyId, razorpayKeySecret))
+                    .build();
+            // Create contact
+            Map<String, Object> contactBody = new HashMap<>();
+            contactBody.put("name", s.getBusinessName());
+            contactBody.put("email", s.getUser() != null ? s.getUser().getEmail() : "");
+            contactBody.put("type", "vendor");
+            Map<String, Object> contactResp = client.post().uri("/contacts")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(contactBody)
+                    .retrieve().bodyToMono(Map.class).block();
+            if (contactResp == null || contactResp.get("id") == null) return;
+            String contactId = (String) contactResp.get("id");
+            s.setRazorpayContactId(contactId);
+            // Create fund account
+            Map<String, Object> bankAccount = new HashMap<>();
+            bankAccount.put("name", s.getAccountHolderName());
+            bankAccount.put("ifsc", s.getBankIfsc());
+            bankAccount.put("account_number", s.getBankAccountNumber());
+            Map<String, Object> fundBody = new HashMap<>();
+            fundBody.put("contact_id", contactId);
+            fundBody.put("account_type", "bank_account");
+            fundBody.put("bank_account", bankAccount);
+            Map<String, Object> fundResp = client.post().uri("/fund_accounts")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(fundBody)
+                    .retrieve().bodyToMono(Map.class).block();
+            if (fundResp != null && fundResp.get("id") != null) {
+                s.setRazorpayFundAccountId((String) fundResp.get("id"));
+            }
+            sellerRepository.save(s);
+            log.info("Razorpay X contact {} and fund account created for seller {}", contactId, s.getId());
+        } catch (Exception e) {
+            log.error("Failed to create Razorpay X contact for seller {}: {}", s.getId(), e.getMessage());
+        }
     }
 
     @Transactional

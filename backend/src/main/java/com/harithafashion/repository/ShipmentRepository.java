@@ -22,4 +22,6 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
     Optional<Shipment> findByShiprocketOrderId(String shiprocketOrderId);
 
     List<Shipment> findByOrderIdAndStatus(UUID orderId, String status);
+
+    List<Shipment> findByStatusIn(List<String> statuses);
 }

@@ -6,7 +6,8 @@ export const productApi = {
   newArrivals: () => api.get('/products/new-arrivals'),
   getBySlug: (slug) => api.get(`/products/${slug}`),
   completeTheLook: (id) => api.get(`/products/${id}/complete-the-look`),
-  pincodeCheck: (pincode) => api.get(`/products/pincode/${pincode}/serviceability`)
+  pincodeCheck: (pincode) => api.get(`/products/pincode/${pincode}/serviceability`),
+  onSale: () => api.get('/products/on-sale')
 }
 
 export const categoryApi = {

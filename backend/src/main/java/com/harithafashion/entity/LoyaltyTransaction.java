@@ -40,6 +40,10 @@ public class LoyaltyTransaction {
     @Column(name = "expires_at")
     private LocalDate expiresAt;
 
+    @Column(name = "expired")
+    @Builder.Default
+    private Boolean expired = false;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { productApi } from '../api/productApi'
+import { productApi, categoryApi } from '../api/productApi'
 import { formatINR, calcDiscount } from '../utils/formatters'
 import { setSEO } from '../utils/seo'
 import { resolveImageUrl, imageFallback } from '../utils/images'
@@ -17,7 +17,7 @@ import TrustStrip from '../components/ui/TrustStrip'
 import ImageZoom from '../components/common/ImageZoom'
 import EmiDisplay from '../components/product/EmiDisplay'
 import VideoPlayer from '../components/common/VideoPlayer'
-import { Heart, Star, Truck, RotateCcw, ShieldCheck, MapPin } from 'lucide-react'
+import { Heart, Star, Truck, RotateCcw, ShieldCheck, MapPin, Ruler, X } from 'lucide-react'
 
 export default function ProductDetailPage() {
   const { slug } = useParams()
@@ -30,6 +30,9 @@ export default function ProductDetailPage() {
   const [pincode, setPincode] = useState('')
   const [serviceable, setServiceable] = useState(null)
   const [alertEmail, setAlertEmail] = useState('')
+  const [selectedColor, setSelectedColor] = useState(null)
+  const [sizeGuide, setSizeGuide] = useState(null)
+  const [showSizeGuide, setShowSizeGuide] = useState(false)
   const { addToCart } = useCart()
   const { isAuthenticated, user } = useAuth()
   const { toggle, isWishlisted } = useWishlist()
@@ -39,11 +42,19 @@ export default function ProductDetailPage() {
     setLoading(true)
     productApi.getBySlug(slug).then((r) => {
       const p = r.data
-      setProduct(p)
       setSEO(p.name, p.description, resolveImageUrl(p.images?.[0]?.imageUrl))
       trackEvent('view_item', { item_id: p.id, item_name: p.name, price: p.finalPrice })
-      if (p.variants?.length) setSelectedVariant(p.variants.find((v) => v.stockQuantity > 0) || p.variants[0])
+      if (p.variants?.length) {
+        const firstAvail = p.variants.find((v) => v.stockQuantity > 0) || p.variants[0]
+        setSelectedColor(firstAvail?.color || null)
+        setSelectedVariant(firstAvail)
+      }
       productApi.completeTheLook(p.id).then((res) => setRelated(res.data || [])).catch(() => {})
+      // Fetch size guide for this product's category
+      if (p.categoryId) {
+        categoryApi.getSizeGuide(p.categoryId).then((r) => setSizeGuide(r.data)).catch(() => {})
+      }
+      setProduct(p)
     }).catch(() => setProduct(null)).finally(() => setLoading(false))
   }, [slug])
 
@@ -89,8 +100,63 @@ export default function ProductDetailPage() {
   const outOfStock = selectedVariant && selectedVariant.stockQuantity <= 0
   const wishlisted = isWishlisted(product.id)
 
+  // Unique colours from variants
+  const uniqueColors = [...new Map(
+    product.variants?.filter(v => v.color).map(v => [v.color, { color: v.color, hex: v.colorHex }])
+  ).values()]
+
+  // Sizes available for selected colour
+  const sizesForColor = product.variants?.filter(v =>
+    !selectedColor || v.color === selectedColor || !v.color
+  ) || []
+
+  // JSON-LD schema for SEO
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    description: product.description,
+    image: product.images?.map(i => resolveImageUrl(i.imageUrl)) || [],
+    brand: { '@type': 'Brand', name: product.sellerName || 'Haritha Fashion World' },
+    offers: {
+      '@type': 'Offer',
+      price: product.finalPrice,
+      priceCurrency: 'INR',
+      availability: outOfStock ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
+      url: window.location.href
+    },
+    ...(product.avgRating > 0 && {
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: product.avgRating,
+        reviewCount: product.reviewCount || 1
+      }
+    })
+  }
+
   return (
     <div className="page-shell">
+      {/* JSON-LD */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+
+      {/* Size Guide Modal */}
+      {showSizeGuide && sizeGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowSizeGuide(false)} />
+          <div className="relative bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-display text-xl font-semibold">Size Guide</h3>
+              <button onClick={() => setShowSizeGuide(false)}><X size={20} /></button>
+            </div>
+            {sizeGuide.content ? (
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: sizeGuide.content }} />
+            ) : (
+              <p className="text-gray-500 text-sm">Size guide not available for this category.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       <nav className="breadcrumb">
         <Link to="/">Home</Link>
         <span className="breadcrumb-sep">/</span>
@@ -154,23 +220,63 @@ export default function ProductDetailPage() {
           </div>
 
           {product.variants?.length > 0 && (
-            <div>
-              <p className="font-semibold mb-3 text-sm uppercase tracking-wide text-gray-500">Select Size</p>
-              <div className="flex flex-wrap gap-2">
-                {product.variants.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setSelectedVariant(v)}
-                    disabled={v.stockQuantity <= 0}
-                    className={
-                      v.stockQuantity <= 0 ? 'variant-pill-disabled'
-                        : selectedVariant?.id === v.id ? 'variant-pill-active' : 'variant-pill-inactive'
-                    }
-                  >
-                    {v.size || v.color}
-                  </button>
-                ))}
+            <div className="space-y-4">
+              {/* Colour selector */}
+              {uniqueColors.length > 0 && (
+                <div>
+                  <p className="font-semibold mb-2 text-sm uppercase tracking-wide text-gray-500">
+                    Colour: <span className="text-gray-800 normal-case font-medium">{selectedColor || 'Select'}</span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueColors.map((c) => (
+                      <button key={c.color} type="button"
+                        onClick={() => {
+                          setSelectedColor(c.color)
+                          const firstAvail = product.variants.find(v => v.color === c.color && v.stockQuantity > 0)
+                            || product.variants.find(v => v.color === c.color)
+                          if (firstAvail) setSelectedVariant(firstAvail)
+                        }}
+                        title={c.color}
+                        className={`w-8 h-8 rounded-full border-2 transition-all ${selectedColor === c.color ? 'border-brand scale-110 shadow-md ring-2 ring-brand/30' : 'border-gray-200 hover:scale-105'}`}
+                        style={{ backgroundColor: c.hex || '#ccc' }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Size selector */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-sm uppercase tracking-wide text-gray-500">Size</p>
+                  {sizeGuide && (
+                    <button type="button" onClick={() => setShowSizeGuide(true)}
+                      className="flex items-center gap-1 text-xs text-brand hover:underline">
+                      <Ruler size={13} /> Size guide
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sizesForColor.map((v) => {
+                    const lowStock = v.stockQuantity > 0 && v.stockQuantity <= 5
+                    return (
+                      <button key={v.id} type="button"
+                        onClick={() => setSelectedVariant(v)}
+                        disabled={v.stockQuantity <= 0}
+                        className={v.stockQuantity <= 0 ? 'variant-pill-disabled'
+                          : selectedVariant?.id === v.id ? 'variant-pill-active' : 'variant-pill-inactive'}
+                        title={lowStock ? `Only ${v.stockQuantity} left!` : ''}
+                      >
+                        {v.size || v.color}
+                        {lowStock && <span className="ml-1 text-[10px] text-amber-500">•</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+                {selectedVariant && selectedVariant.stockQuantity > 0 && selectedVariant.stockQuantity <= 5 && (
+                  <p className="text-amber-600 text-xs mt-1.5 font-medium">
+                    ⚡ Only {selectedVariant.stockQuantity} left in stock!
+                  </p>
+                )}
               </div>
             </div>
           )}

@@ -26,4 +26,7 @@ public interface LoyaltyTransactionRepository extends JpaRepository<LoyaltyTrans
 
     @Query("SELECT lt FROM LoyaltyTransaction lt WHERE lt.user.id = :userId AND lt.expiresAt IS NOT NULL AND lt.expiresAt < :today")
     List<LoyaltyTransaction> findExpiredByUserId(@Param("userId") UUID userId, @Param("today") LocalDate today);
+
+    @Query("SELECT lt FROM LoyaltyTransaction lt WHERE lt.type = 'EARN' AND lt.expired = false AND lt.expiresAt IS NOT NULL AND lt.expiresAt < :today")
+    List<LoyaltyTransaction> findExpiredEarnTransactions(@Param("today") java.time.LocalDate today);
 }
