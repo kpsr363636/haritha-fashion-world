@@ -11,6 +11,7 @@ export const loadRazorpay = () =>
 export const openRazorpayCheckout = async ({ keyId, orderId, amount, name, email, mobile, onSuccess, onFailure }) => {
   const loaded = await loadRazorpay()
   if (!loaded) { onFailure?.({ message: 'Razorpay SDK failed to load' }); return }
+  let paymentCompleted = false
   const options = {
     key: keyId,
     amount: amount * 100,
@@ -20,8 +21,15 @@ export const openRazorpayCheckout = async ({ keyId, orderId, amount, name, email
     order_id: orderId,
     prefill: { name, email, contact: mobile },
     theme: { color: '#B5476A' },
-    handler: (response) => onSuccess?.(response),
-    modal: { ondismiss: () => onFailure?.({ message: 'Payment cancelled' }) }
+    handler: (response) => {
+      paymentCompleted = true
+      onSuccess?.(response)
+    },
+    modal: {
+      ondismiss: () => {
+        if (!paymentCompleted) onFailure?.({ message: 'Payment cancelled' })
+      }
+    }
   }
   new window.Razorpay(options).open()
 }

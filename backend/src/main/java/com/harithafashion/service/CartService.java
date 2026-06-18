@@ -32,15 +32,19 @@ public class CartService {
     private final ProductVariantRepository variantRepository;
     private final ProductImageRepository imageRepository;
     private final StockReservationService stockReservationService;
+    private final StockReservationRepository reservationRepository;
     private final UserRepository userRepository;
 
     @Transactional
     public CartResponse addToCart(UUID userId, AddToCartRequest req) {
         ProductVariant variant = variantRepository.findById(req.getVariantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Variant not found"));
-        int available = variant.getStockQuantity() - variant.getReservedQuantity();
+        // Available = global available stock + user's own reservation (they can update their own qty)
+        int userOwnReserved = reservationRepository.findByVariantIdAndUserId(req.getVariantId(), userId)
+                .map(r -> r.getQuantity()).orElse(0);
+        int available = variant.getStockQuantity() - variant.getReservedQuantity() + userOwnReserved;
         if (available < req.getQuantity()) {
-            throw new OutOfStockException("Insufficient stock");
+            throw new OutOfStockException("Only " + available + " item(s) available in stock");
         }
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseGet(() -> {

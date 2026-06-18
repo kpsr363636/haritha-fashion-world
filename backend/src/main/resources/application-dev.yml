@@ -14,3 +14,11 @@ logging:
 app:
   cors:
     allowed-origins: http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173
+  delivery:
+    charge: 1
+    free-threshold: 999999
+
+razorpay:
+  key-id: rzp_live_T2us6h38UBrNiN
+  key-secret: bSHV10TxIvwjQ9gWj75b0vNA
+  webhook-secret: ''
