@@ -23,6 +23,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     boolean existsByOrderNumber(String orderNumber);
 
+    @Query("SELECT MAX(CAST(SUBSTRING(o.orderNumber, 9) AS int)) FROM Order o WHERE o.orderNumber LIKE CONCAT('HF-', :year, '-%')")
+    Integer findMaxSequenceForYear(@Param("year") String year);
+
     Page<Order> findByUserIdOrderByPlacedAtDesc(UUID userId, Pageable pageable);
 
     Page<Order> findByUserIdAndStatusOrderByPlacedAtDesc(UUID userId, OrderStatus status, Pageable pageable);

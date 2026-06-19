@@ -35,10 +35,26 @@ export function CartProvider({ children }) {
     return res
   }
 
+  const updateCartItem = async (cartItemId, quantity) => {
+    const res = quantity < 1
+      ? await cartApi.removeItem(cartItemId)
+      : await cartApi.updateItem(cartItemId, { quantity })
+    setCart(res.data)
+    return res
+  }
+
+  const removeFromCart = async (cartItemId) => {
+    const res = await cartApi.removeItem(cartItemId)
+    setCart(res.data)
+    return res
+  }
+
   const itemCount = cart?.items?.reduce((sum, i) => sum + i.quantity, 0) || 0
 
   return (
-    <CartContext.Provider value={{ cart, loading, itemCount, refreshCart, addToCart, setCart }}>
+    <CartContext.Provider value={{
+      cart, loading, itemCount, refreshCart, addToCart, updateCartItem, removeFromCart, setCart
+    }}>
       {children}
     </CartContext.Provider>
   )

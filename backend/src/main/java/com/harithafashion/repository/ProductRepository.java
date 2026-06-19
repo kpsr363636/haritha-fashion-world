@@ -27,6 +27,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     Page<Product> findBySellerIdAndStatus(UUID sellerId, ProductStatus status, Pageable pageable);
     long countBySellerId(UUID sellerId);
     List<Product> findTop10ByStatusOrderByCreatedAtDesc(ProductStatus status);
+    List<Product> findTop10ByStatusOrderByTotalSoldDesc(ProductStatus status);
 
     @Query(value = """
             SELECT p.* FROM products p

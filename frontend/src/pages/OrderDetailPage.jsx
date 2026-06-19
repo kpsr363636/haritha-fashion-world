@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { Download, Package, MapPin, CreditCard, ArrowLeft, Truck, ExternalLink } from 'lucide-react'
-import { orderApi } from '../api/orderApi'
+import { orderApi, paymentApi } from '../api/orderApi'
 import { formatINR, formatDate } from '../utils/formatters'
+import { openRazorpayCheckout } from '../utils/razorpay'
+import { useAuth } from '../context/AuthContext'
+import { useCart } from '../context/CartContext'
 import ProtectedRoute from '../components/common/ProtectedRoute'
 import StatusBadge from '../components/ui/StatusBadge'
 import OrderTimeline from '../components/ui/OrderTimeline'
@@ -10,8 +13,12 @@ import LoadingScreen from '../components/ui/LoadingScreen'
 
 function OrderDetailContent() {
   const { id } = useParams()
+  const { user } = useAuth()
+  const { refreshCart } = useCart()
+  const navigate = useNavigate()
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [paying, setPaying] = useState(false)
   const [codOtp, setCodOtp] = useState('')
   const [codMsg, setCodMsg] = useState('')
   const [tracking, setTracking] = useState(null)
@@ -54,6 +61,61 @@ function OrderDetailContent() {
       load()
     } catch (err) {
       setCodMsg(err.message || 'Invalid OTP')
+    }
+  }
+
+  const retryPayment = async () => {
+    if (!order || paying) return
+    setPaying(true)
+    try {
+      const payRes = await paymentApi.createOrder(order.id)
+      const pay = payRes.data
+      const keyId = pay.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID
+      if (!keyId || pay.razorpayOrderId?.startsWith('order_dev_')) {
+        await paymentApi.verify({
+          razorpayOrderId: pay.razorpayOrderId,
+          razorpayPaymentId: `pay_dev_${order.id}`,
+          signature: 'dev'
+        })
+        await refreshCart()
+        load()
+        return
+      }
+      openRazorpayCheckout({
+        keyId,
+        orderId: pay.razorpayOrderId,
+        amount: order.totalAmount,
+        name: user?.name,
+        email: user?.email,
+        mobile: user?.mobile,
+        callbackPath: `/payment/return?orderId=${order.id}`,
+        onSuccess: async (response) => {
+          try {
+            await paymentApi.verify({
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature
+            })
+            await refreshCart()
+            load()
+          } catch (err) {
+            alert(err?.message || 'Payment verification failed')
+          } finally {
+            setPaying(false)
+          }
+        },
+        onFailure: async (err) => {
+          setPaying(false)
+          if (window.confirm(`${err?.message || 'Payment cancelled'}. Cancel this order and restore your cart?`)) {
+            await orderApi.cancel(order.id)
+            await refreshCart()
+            navigate('/cart')
+          }
+        }
+      })
+    } catch (err) {
+      alert(err?.message || 'Could not start payment')
+      setPaying(false)
     }
   }
 
@@ -128,6 +190,21 @@ function OrderDetailContent() {
               Load live tracking
             </button>
           )}
+        </div>
+      )}
+
+      {order.paymentStatus === 'PENDING' && order.paymentMethod !== 'COD' && order.status !== 'CANCELLED' && (
+        <div className="surface-card p-5 md:p-6 mb-6 border-brand/20 bg-gradient-to-br from-brand-50/40 to-white">
+          <p className="font-semibold mb-1">Payment pending</p>
+          <p className="text-sm text-gray-500 mb-4">Complete payment to confirm this order, or cancel to restore items to your cart.</p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={retryPayment} disabled={paying} className="btn-primary">
+              {paying ? 'Opening Razorpay…' : 'Pay now'}
+            </button>
+            <button type="button" onClick={() => orderApi.cancel(order.id).then(() => refreshCart().then(() => navigate('/cart')))} className="btn-outline text-red-600 border-red-200">
+              Cancel order
+            </button>
+          </div>
         </div>
       )}
 

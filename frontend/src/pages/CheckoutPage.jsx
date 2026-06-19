@@ -6,6 +6,7 @@ import { useCart } from '../context/CartContext'
 import { addressApi } from '../api/orderApi'
 import { orderApi, paymentApi } from '../api/orderApi'
 import { couponApi, giftCardApi } from '../api/giftCardApi'
+import { loyaltyApi } from '../api/userApi'
 import { formatINR } from '../utils/formatters'
 import { openRazorpayCheckout } from '../utils/razorpay'
 import { trackEvent } from '../utils/analytics'
@@ -35,6 +36,9 @@ export default function CheckoutPage() {
   const [couponDiscount, setCouponDiscount] = useState(null)
   const [couponMsg, setCouponMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const [paymentPending, setPaymentPending] = useState(false)
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0)
+  const [loyaltyToUse, setLoyaltyToUse] = useState(0)
 
   const loadAddresses = () => {
     addressApi.list().then((r) => {
@@ -48,6 +52,7 @@ export default function CheckoutPage() {
     if (isAuthenticated) {
       refreshCart()
       loadAddresses()
+      loyaltyApi.summary().then((r) => setLoyaltyPoints(r.data?.points || 0)).catch(() => {})
     }
   }, [isAuthenticated, refreshCart])
 
@@ -55,6 +60,14 @@ export default function CheckoutPage() {
     return (
       <div className="page-shell py-12">
         <EmptyState icon="🔐" title="Login to checkout" message="Sign in to complete your purchase securely." actionLabel="Login" actionTo="/login" />
+      </div>
+    )
+  }
+
+  if (!cart?.items?.length) {
+    return (
+      <div className="page-shell py-12">
+        <EmptyState icon="🛍️" title="Your cart is empty" message="Add items before checkout." actionLabel="Browse products" actionTo="/products" />
       </div>
     )
   }
@@ -90,10 +103,23 @@ export default function CheckoutPage() {
     loadAddresses()
   }
 
-  const estimatedTotal = cart ? Math.max(0, cart.total - (couponDiscount || 0)) : 0
+  const estimatedTotal = cart ? Math.max(0, cart.total - (couponDiscount || 0) - (loyaltyToUse || 0)) : 0
+
+  const handlePaymentFailure = async (order, message) => {
+    setPaymentPending(false)
+    try {
+      await orderApi.cancel(order.orderId)
+    } catch {
+      // Order may already be cancelled or in an unexpected state
+    }
+    await refreshCart()
+    alert(message || 'Payment was not completed. Your order was cancelled and items were restored to your cart.')
+    navigate('/cart')
+  }
 
   const placeOrder = async () => {
     if (!selectedAddress) return alert('Select or add an address')
+    if (!cart?.items?.length) return alert('Your cart is empty')
     setLoading(true)
     try {
       trackEvent('begin_checkout', { value: cart?.total })
@@ -101,7 +127,8 @@ export default function CheckoutPage() {
         addressId: selectedAddress,
         paymentMethod: paymentMethod === 'COD' ? 'COD' : 'ONLINE',
         couponCode: couponCode.trim() || undefined,
-        giftCardCode: giftCardCode.trim() || undefined
+        giftCardCode: giftCardCode.trim() || undefined,
+        loyaltyPointsToUse: loyaltyToUse > 0 ? loyaltyToUse : undefined
       })
       const order = res.data
       if (order.requiresPayment && order.razorpayOrderId) {
@@ -117,6 +144,8 @@ export default function CheckoutPage() {
           navigate(`/orders/${order.orderId}`)
           return
         }
+        setLoading(false)
+        setPaymentPending(true)
         trackEvent('add_payment_info', { payment_type: paymentMethod })
         openRazorpayCheckout({
           keyId: order.razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
@@ -125,17 +154,25 @@ export default function CheckoutPage() {
           name: user?.name,
           email: user?.email,
           mobile: user?.mobile,
+          callbackPath: `/payment/return?orderId=${order.orderId}`,
           onSuccess: async (response) => {
-            await paymentApi.verify({
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature
-            })
-            trackEvent('purchase', { transaction_id: order.orderNumber, value: order.totalAmount, currency: 'INR' })
-            navigate(`/orders/${order.orderId}`)
+            try {
+              await paymentApi.verify({
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature
+              })
+              trackEvent('purchase', { transaction_id: order.orderNumber, value: order.totalAmount, currency: 'INR' })
+              setPaymentPending(false)
+              await refreshCart()
+              navigate(`/orders/${order.orderId}`)
+            } catch (err) {
+              await handlePaymentFailure(order, err?.message || 'Payment verification failed')
+            }
           },
-          onFailure: (err) => alert(err.message || 'Payment failed')
+          onFailure: (err) => handlePaymentFailure(order, err?.message || 'Payment cancelled')
         })
+        return
       } else {
         trackEvent('purchase', { transaction_id: order.orderNumber, value: order.totalAmount, currency: 'INR' })
         await refreshCart()
@@ -235,6 +272,19 @@ export default function CheckoutPage() {
               <button type="button" onClick={checkGiftCard} className="btn-outline whitespace-nowrap flex items-center gap-1"><Gift className="w-4 h-4" /> Check</button>
             </div>
             {giftCardBalance != null && <p className="text-sm text-emerald-600 mt-2 font-medium">Gift card balance: {formatINR(giftCardBalance)}</p>}
+            {loyaltyPoints > 0 && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium mb-1">Loyalty points (balance: {loyaltyPoints})</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  min="0"
+                  max={loyaltyPoints}
+                  value={loyaltyToUse}
+                  onChange={(e) => setLoyaltyToUse(Math.min(loyaltyPoints, Math.max(0, Number(e.target.value) || 0)))}
+                />
+              </div>
+            )}
           </section>
         </div>
 
@@ -247,14 +297,15 @@ export default function CheckoutPage() {
                 <div className="flex justify-between"><span className="text-gray-500">GST</span><span>{formatINR(cart.gstAmount)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Delivery</span><span className={cart.freeDelivery ? 'text-emerald-600' : ''}>{cart.freeDelivery ? 'FREE' : formatINR(cart.deliveryCharge)}</span></div>
                 {couponDiscount > 0 && <div className="flex justify-between text-emerald-600"><span>Coupon</span><span>−{formatINR(couponDiscount)}</span></div>}
+                {loyaltyToUse > 0 && <div className="flex justify-between text-emerald-600"><span>Loyalty</span><span>−{formatINR(loyaltyToUse)}</span></div>}
                 <div className="flex justify-between font-bold text-xl pt-4 border-t">
                   <span>Total</span>
                   <span className="text-brand">{formatINR(estimatedTotal)}</span>
                 </div>
               </div>
             )}
-            <button onClick={placeOrder} disabled={loading || !selectedAddress} className="btn-primary w-full py-4 text-base">
-              {loading ? 'Processing...' : 'Place Order'}
+            <button onClick={placeOrder} disabled={loading || paymentPending || !selectedAddress} className="btn-primary w-full py-4 text-base">
+              {paymentPending ? 'Complete payment in Razorpay…' : loading ? 'Processing...' : 'Place Order'}
             </button>
             <div className="flex items-center justify-center gap-2 mt-4 text-xs text-gray-500">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />

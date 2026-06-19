@@ -2,6 +2,7 @@ package com.harithafashion.controller;
 
 import com.harithafashion.dto.response.ApiResponse;
 import com.harithafashion.dto.response.CategoryResponse;
+import com.harithafashion.dto.response.CategoryVariantSizesResponse;
 import com.harithafashion.entity.SizeGuide;
 import com.harithafashion.service.CategoryService;
 import lombok.RequiredArgsConstructor;
@@ -30,5 +31,10 @@ public class CategoryController {
     @GetMapping("/{id}/size-guide")
     public ApiResponse<SizeGuide> getSizeGuide(@PathVariable UUID id) {
         return ApiResponse.ok(categoryService.getSizeGuide(id));
+    }
+
+    @GetMapping("/{id}/variant-sizes")
+    public ApiResponse<CategoryVariantSizesResponse> getVariantSizes(@PathVariable UUID id) {
+        return ApiResponse.ok(categoryService.getVariantSizes(id));
     }
 }

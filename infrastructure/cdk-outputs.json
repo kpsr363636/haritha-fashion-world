@@ -1,0 +1,17 @@
+{
+  "HarithaFashionStack": {
+    "MediaBucketName": "harithafashionstack-mediabucketbcbb02ba-umfyovgxpdwz",
+    "CloudFrontDistributionId": "E3H18CZDPDUHIQ",
+    "SiteUrl": "https://harithafashionworld.com",
+    "AppSecretArn": "arn:aws:secretsmanager:ap-south-1:848005667997:secret:haritha/app-config-r9BzS7",
+    "EcsClusterName": "HarithaFashionStack-ClusterEB0386A7-NWtaTgy1JFc0",
+    "RedisEndpoint": "har-re-15y6gk0rw1bid.wewdrr.0001.aps1.cache.amazonaws.com",
+    "CustomDomain": "harithafashionworld.com",
+    "AlbDnsName": "Harith-Alb16-tt7nv6gYYH47-1588915504.ap-south-1.elb.amazonaws.com",
+    "FrontendBucketName": "harithafashionstack-frontendbucketefe2e19c-wyy4co5zo9x1",
+    "EcrRepositoryUri": "848005667997.dkr.ecr.ap-south-1.amazonaws.com/haritha-fashion-backend",
+    "DbSecretArn": "arn:aws:secretsmanager:ap-south-1:848005667997:secret:haritha/db-credentials-5YShq6",
+    "CloudFrontDomain": "d3nbxbrf2erkfr.cloudfront.net",
+    "EcsServiceName": "HarithaFashionStack-BackendService7A4224EE-Nw3bf5aBad1l"
+  }
+}

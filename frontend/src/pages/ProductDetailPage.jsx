@@ -47,9 +47,19 @@ export default function ProductDetailPage() {
     }).catch(() => setProduct(null)).finally(() => setLoading(false))
   }, [slug])
 
+  useEffect(() => {
+    if (selectedVariant?.stockQuantity != null) {
+      setQty((q) => Math.min(q, Math.max(1, selectedVariant.stockQuantity)))
+    }
+  }, [selectedVariant])
+
   const handleAddToCart = async () => {
     if (!isAuthenticated) { navigate('/login'); return }
     if (!selectedVariant) return
+    if (selectedVariant.stockQuantity > 0 && qty > selectedVariant.stockQuantity) {
+      alert(`Only ${selectedVariant.stockQuantity} item(s) available in stock`)
+      return
+    }
     try {
       await addToCart(product.id, selectedVariant.id, qty)
       trackEvent('add_to_cart', { item_id: product.id, quantity: qty })
@@ -72,9 +82,14 @@ export default function ProductDetailPage() {
   }
 
   const notifyStock = async () => {
+    if (!isAuthenticated) { navigate('/login'); return }
     if (!selectedVariant) return
-    await stockAlertApi.subscribe(product.id, selectedVariant.id, alertEmail || user?.email)
-    alert('We will notify you when back in stock')
+    try {
+      await stockAlertApi.subscribe(product.id, selectedVariant.id, alertEmail || user?.email)
+      alert('We will notify you when back in stock')
+    } catch (err) {
+      alert(err.message || 'Could not subscribe to stock alert')
+    }
   }
 
   if (loading) return <LoadingScreen message="Loading product..." />
@@ -86,7 +101,8 @@ export default function ProductDetailPage() {
   )
 
   const discount = calcDiscount(product.mrp, product.finalPrice)
-  const outOfStock = selectedVariant && selectedVariant.stockQuantity <= 0
+  const maxQty = selectedVariant ? Math.max(0, selectedVariant.stockQuantity) : 0
+  const outOfStock = !selectedVariant || maxQty <= 0
   const wishlisted = isWishlisted(product.id)
 
   return (
@@ -113,7 +129,7 @@ export default function ProductDetailPage() {
           {(product.images?.length > 1 || product.videos?.length > 0) && (
             <div className="flex gap-3 mt-4 overflow-x-auto pb-1">
               {product.images.map((img, i) => (
-                <button key={img.id || i} type="button" onClick={() => setSelectedImage(i)} className={`w-20 h-24 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${selectedImage === i ? 'border-brand shadow-md ring-2 ring-brand/20' : 'border-transparent opacity-70 hover:opacity-100'}`}>
+                <button key={img.id || i} type="button" onClick={() => setSelectedImage(i)} className={selectedImage === i ? 'gallery-thumb-active' : 'gallery-thumb-inactive'}>
                   <img src={resolveImageUrl(img.imageUrl)} alt="" className="w-full h-full object-cover" onError={imageFallback} />
                 </button>
               ))}
@@ -128,9 +144,10 @@ export default function ProductDetailPage() {
           )}
         </div>
 
-        <div className="lg:sticky lg:top-24 lg:self-start space-y-6">
+        <div className="lg:sticky lg:top-28 lg:self-start space-y-6">
+          <div className="surface-card p-6 md:p-7 shadow-card border-brand-100/50 space-y-6">
           <div>
-            <p className="text-sm text-brand font-medium">{product.sellerName}</p>
+            <p className="text-xs uppercase tracking-wider text-brand font-semibold">{product.sellerName}</p>
             <h1 className="font-display text-3xl md:text-4xl font-semibold mt-2 leading-tight">{product.name}</h1>
             {product.avgRating > 0 && (
               <div className="flex items-center gap-2 mt-3">
@@ -179,8 +196,11 @@ export default function ProductDetailPage() {
             <div className="qty-control">
               <button type="button" onClick={() => setQty(Math.max(1, qty - 1))} className="qty-btn">−</button>
               <span className="qty-value">{qty}</span>
-              <button type="button" onClick={() => setQty(qty + 1)} className="qty-btn">+</button>
+              <button type="button" onClick={() => setQty(Math.min(maxQty, qty + 1))} className="qty-btn" disabled={qty >= maxQty}>+</button>
             </div>
+            {!outOfStock && maxQty <= 5 && (
+              <span className="text-xs text-amber-600">Only {maxQty} left</span>
+            )}
             <button type="button" onClick={() => toggle(product)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${wishlisted ? 'border-brand bg-brand-50 text-brand' : 'border-gray-200 hover:border-brand-200 text-gray-600'}`}>
               <Heart className={`w-4 h-4 ${wishlisted ? 'fill-brand' : ''}`} />
               {wishlisted ? 'Saved' : 'Wishlist'}
@@ -237,15 +257,30 @@ export default function ProductDetailPage() {
           </div>
 
           {product.description && (
-            <div className="surface-card p-5">
+            <div className="surface-card p-5 md:p-6">
               <h3 className="font-display text-xl font-semibold mb-3">About this product</h3>
               <p className="text-gray-600 text-sm leading-relaxed">{product.description}</p>
             </div>
           )}
+          </div>
         </div>
       </div>
 
-      <div className="mt-16 md:mt-20">
+      {/* Mobile sticky buy bar */}
+      {!outOfStock && (
+        <div className="mobile-buy-bar">
+          <div className="flex items-center gap-3 max-w-7xl mx-auto">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 truncate">{product.name}</p>
+              <p className="font-bold text-brand text-lg">{formatINR(product.finalPrice)}</p>
+            </div>
+            <button type="button" onClick={handleAddToCart} className="btn-outline py-3 px-5 text-sm shrink-0">Add</button>
+            <button type="button" onClick={handleBuyNow} className="btn-primary py-3 px-6 text-sm shrink-0">Buy Now</button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-16 md:mt-20 pb-20 lg:pb-0">
         <ReviewsSection productId={product.id} />
         <QASection productId={product.id} />
       </div>

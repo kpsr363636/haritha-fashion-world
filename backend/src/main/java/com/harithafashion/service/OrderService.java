@@ -1,6 +1,7 @@
 package com.harithafashion.service;
 
 import com.harithafashion.dto.request.PlaceOrderRequest;
+import com.harithafashion.dto.request.AddToCartRequest;
 import com.harithafashion.dto.response.*;
 import com.harithafashion.entity.*;
 import com.harithafashion.entity.enums.OrderStatus;
@@ -160,7 +161,12 @@ public class OrderService {
         }
 
         for (var item : cart.getItems()) {
-            stockReservationService.confirmSale(item.getVariantId(), item.getQuantity());
+            if (isCod) {
+                stockReservationService.confirmSale(item.getVariantId(), item.getQuantity());
+                stockReservationService.clearReservationForVariant(item.getVariantId(), userId);
+            } else {
+                stockReservationService.linkReservationToOrder(item.getVariantId(), userId, order.getId());
+            }
             Product product = productRepository.findByIdWithSeller(item.getProductId()).orElseThrow();
             ProductVariant variant = variantRepository.findById(item.getVariantId()).orElse(null);
             Seller seller = product.getSeller();
@@ -206,8 +212,23 @@ public class OrderService {
         return resp.build();
     }
 
-    public Page<Order> getUserOrders(UUID userId, int page, int size) {
-        return orderRepository.findByUserIdOrderByPlacedAtDesc(userId, PageRequest.of(page, size));
+    public Page<OrderSummaryResponse> getUserOrders(UUID userId, int page, int size) {
+        return orderRepository.findByUserIdOrderByPlacedAtDesc(userId, PageRequest.of(page, size))
+                .map(this::toSummaryResponse);
+    }
+
+    private OrderSummaryResponse toSummaryResponse(Order order) {
+        int itemCount = orderItemRepository.findByOrderId(order.getId()).size();
+        return OrderSummaryResponse.builder()
+                .id(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .status(order.getStatus())
+                .paymentStatus(order.getPaymentStatus())
+                .paymentMethod(order.getPaymentMethod())
+                .totalAmount(order.getTotalAmount())
+                .placedAt(order.getPlacedAt())
+                .itemCount(itemCount)
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -300,11 +321,19 @@ public class OrderService {
             throw new BadRequestException("Order cannot be cancelled");
         }
         order.setStatus(OrderStatus.CANCELLED);
+        boolean sold = Boolean.TRUE.equals(order.getIsCod())
+                || order.getPaymentStatus() == PaymentStatus.PAID;
+        if (!sold && !stockReservationService.hasReservationForOrder(id)) {
+            sold = true;
+        }
+        final boolean stockWasSold = sold;
         orderItemRepository.findByOrderId(id).forEach(item -> {
             if (item.getVariant() != null) {
-                ProductVariant v = variantRepository.findByIdForUpdate(item.getVariant().getId()).orElseThrow();
-                v.setStockQuantity(v.getStockQuantity() + item.getQuantity());
-                variantRepository.save(v);
+                if (stockWasSold) {
+                    ProductVariant v = variantRepository.findByIdForUpdate(item.getVariant().getId()).orElseThrow();
+                    v.setStockQuantity(v.getStockQuantity() + item.getQuantity());
+                    variantRepository.save(v);
+                }
             }
             if (item.getSeller() != null) {
                 Seller s = item.getSeller();
@@ -312,8 +341,16 @@ public class OrderService {
                 sellerRepository.save(s);
             }
         });
-        refundService.processRefund(id, null, order.getTotalAmount(), "Order cancelled");
-        loyaltyService.deductForOrderCancel(order);
+        if (!stockWasSold) {
+            stockReservationService.releaseForOrder(id);
+            restoreCartFromOrder(order, userId);
+        }
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            refundService.processRefund(id, null, order.getTotalAmount(), "Order cancelled");
+        } else {
+            order.setPaymentStatus(PaymentStatus.FAILED);
+            loyaltyService.deductForOrderCancel(order);
+        }
         return orderRepository.save(order);
     }
 
@@ -336,5 +373,20 @@ public class OrderService {
             cart.getItems().clear();
             cartRepository.save(cart);
         });
+    }
+
+    private void restoreCartFromOrder(Order order, UUID userId) {
+        for (OrderItem item : orderItemRepository.findByOrderId(order.getId())) {
+            if (item.getVariant() == null || item.getProduct() == null) continue;
+            try {
+                AddToCartRequest req = new AddToCartRequest();
+                req.setProductId(item.getProduct().getId());
+                req.setVariantId(item.getVariant().getId());
+                req.setQuantity(item.getQuantity());
+                cartService.addToCart(userId, req);
+            } catch (Exception ignored) {
+                // Item may be unavailable; skip silently
+            }
+        }
     }
 }

@@ -75,6 +75,20 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
+    public ProductDetailResponse getProductById(UUID id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        return toDetail(product, false);
+    }
+
+    @Transactional(readOnly = true)
+    public ProductDetailResponse getProductByIdForAdmin(UUID id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        return toDetail(product, true);
+    }
+
+    @Transactional(readOnly = true)
     public List<ProductCardResponse> getFeatured() {
         return productRepository.findByIsFeaturedTrueAndStatus(ProductStatus.ACTIVE, PageRequest.of(0, 12))
                 .map(this::toCard).getContent();
@@ -125,14 +139,15 @@ public class ProductService {
 
     private ProductCardResponse toCard(Product p) {
         BigDecimal finalPrice = calcFinalPrice(p.getBasePrice(), p.getDiscountPercent());
-        String imageUrl = imageRepository.findByProductIdAndIsPrimaryTrue(p.getId())
+        String imageUrl = imageRepository.findPrimaryForProduct(p.getId())
                 .map(ProductImage::getImageUrl)
-                .or(() -> imageRepository.findByProductIdOrderBySortOrderAsc(p.getId()).stream()
-                        .findFirst()
-                        .map(ProductImage::getImageUrl))
                 .orElse(null);
-        boolean inStock = variantRepository.findByProductId(p.getId()).stream()
+        List<ProductVariant> variants = variantRepository.findByProductId(p.getId());
+        boolean inStock = variants.stream()
                 .anyMatch(v -> v.getStockQuantity() - v.getReservedQuantity() > 0);
+        int totalStock = variants.stream()
+                .mapToInt(v -> Math.max(0, v.getStockQuantity() - v.getReservedQuantity()))
+                .sum();
         String categoryName = resolveCategoryName(p);
         return ProductCardResponse.builder()
                 .id(p.getId())
@@ -147,10 +162,17 @@ public class ProductService {
                 .primaryImageUrl(imageUrl)
                 .categoryName(categoryName)
                 .inStock(inStock)
+                .status(p.getStatus() != null ? p.getStatus().name() : null)
+                .isFeatured(p.getIsFeatured())
+                .totalStock(totalStock)
                 .build();
     }
 
     private ProductDetailResponse toDetail(Product p) {
+        return toDetail(p, false);
+    }
+
+    private ProductDetailResponse toDetail(Product p, boolean rawStock) {
         List<ProductVariant> variants = variantRepository.findByProductId(p.getId());
         List<ProductImage> images = imageRepository.findByProductIdOrderBySortOrderAsc(p.getId());
         String videoUrl = videoRepository.findByProductIdOrderByCreatedAtAsc(p.getId()).stream()
@@ -176,9 +198,11 @@ public class ProductService {
                 .returnWindowDays(p.getReturnWindowDays())
                 .sellerName(p.getSeller() != null ? p.getSeller().getBusinessName() : null)
                 .sellerRating(p.getSeller() != null ? p.getSeller().getAvgRating() : null)
+                .categoryId(p.getCategory() != null ? p.getCategory().getId() : null)
                 .variants(variants.stream().map(v -> ProductVariantResponse.builder()
                         .id(v.getId()).size(v.getSize()).color(v.getColor())
-                        .colorHex(v.getColorHex()).stockQuantity(v.getStockQuantity() - v.getReservedQuantity())
+                        .colorHex(v.getColorHex())
+                        .stockQuantity(rawStock ? v.getStockQuantity() : v.getStockQuantity() - v.getReservedQuantity())
                         .additionalPrice(v.getAdditionalPrice()).sku(v.getSku()).isActive(v.getIsActive()).build()).toList())
                 .images(images.stream().map(img -> ProductImageResponse.builder()
                         .id(img.getId()).imageUrl(img.getImageUrl()).thumbnailUrl(img.getThumbnailUrl())

@@ -12,5 +12,6 @@ export const productApi = {
 export const categoryApi = {
   getTree: () => api.get('/categories'),
   getBySlug: (slug) => api.get(`/categories/${slug}`),
-  getSizeGuide: (categoryId) => api.get(`/categories/${categoryId}/size-guide`)
+  getSizeGuide: (categoryId) => api.get(`/categories/${categoryId}/size-guide`),
+  getVariantSizes: (categoryId) => api.get(`/categories/${categoryId}/variant-sizes`)
 }

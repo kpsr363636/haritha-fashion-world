@@ -4,6 +4,8 @@ import com.harithafashion.dto.request.*;
 import com.harithafashion.dto.response.ApiResponse;
 import com.harithafashion.dto.response.PageResponse;
 import com.harithafashion.dto.response.ProductCardResponse;
+import com.harithafashion.dto.response.ProductDetailResponse;
+import com.harithafashion.dto.response.ProductImageResponse;
 import com.harithafashion.dto.response.SellerOrderItemResponse;
 import com.harithafashion.entity.*;
 import com.harithafashion.entity.enums.ProductStatus;
@@ -60,13 +62,13 @@ public class SellerController {
 
     @GetMapping("/products/{productId}")
     @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
-    public ApiResponse<Product> getProduct(@AuthenticationPrincipal UserPrincipal p, @PathVariable UUID productId) {
-        return ApiResponse.ok(sellerProductService.getMyProduct(p.getId(), productId));
+    public ApiResponse<ProductDetailResponse> getProduct(@AuthenticationPrincipal UserPrincipal p, @PathVariable UUID productId) {
+        return ApiResponse.ok(sellerProductService.getMyProductDetail(p.getId(), productId));
     }
 
     @PostMapping("/products")
     @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
-    public ApiResponse<Product> createProduct(@AuthenticationPrincipal UserPrincipal p,
+    public ApiResponse<ProductCardResponse> createProduct(@AuthenticationPrincipal UserPrincipal p,
                                                 @Valid @RequestBody CreateProductRequest req) {
         return ApiResponse.ok(sellerProductService.createProduct(p.getId(), req));
     }
@@ -96,7 +98,7 @@ public class SellerController {
 
     @PutMapping("/products/{productId}")
     @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
-    public ApiResponse<Product> updateProduct(@AuthenticationPrincipal UserPrincipal p,
+    public ApiResponse<ProductCardResponse> updateProduct(@AuthenticationPrincipal UserPrincipal p,
                                                 @PathVariable UUID productId,
                                                 @RequestBody UpdateProductRequest req) {
         return ApiResponse.ok(sellerProductService.updateProduct(p.getId(), productId, req));
@@ -104,7 +106,7 @@ public class SellerController {
 
     @PatchMapping("/products/{productId}/status")
     @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
-    public ApiResponse<Product> updateStatus(@AuthenticationPrincipal UserPrincipal p,
+    public ApiResponse<ProductCardResponse> updateStatus(@AuthenticationPrincipal UserPrincipal p,
                                              @PathVariable UUID productId,
                                              @RequestBody Map<String, String> body) {
         return ApiResponse.ok(sellerProductService.updateStatus(p.getId(), productId,
@@ -146,7 +148,7 @@ public class SellerController {
 
     @PostMapping("/products/{productId}/images")
     @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
-    public ApiResponse<ProductImage> addImage(@AuthenticationPrincipal UserPrincipal p,
+    public ApiResponse<ProductImageResponse> addImage(@AuthenticationPrincipal UserPrincipal p,
                                               @PathVariable UUID productId,
                                               @Valid @RequestBody ProductImageRequest req) {
         return ApiResponse.ok(sellerProductService.addImage(p.getId(), productId, req));
@@ -184,6 +186,20 @@ public class SellerController {
         Seller seller = sellerService.getByUserId(p.getId());
         return ApiResponse.ok(PageResponse.from(
                 payoutRepository.findBySellerId(seller.getId(), PageRequest.of(page, 20))));
+    }
+
+    @GetMapping("/reviews")
+    @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
+    public ApiResponse<?> reviews(@AuthenticationPrincipal UserPrincipal p,
+                                  @RequestParam(defaultValue = "0") int page) {
+        return ApiResponse.ok(PageResponse.from(reviewService.listForSeller(p.getId(), page, 20)));
+    }
+
+    @GetMapping("/questions")
+    @PreAuthorize("hasAnyRole('SELLER','ADMIN')")
+    public ApiResponse<?> questions(@AuthenticationPrincipal UserPrincipal p,
+                                    @RequestParam(defaultValue = "0") int page) {
+        return ApiResponse.ok(PageResponse.from(productQAService.listForSeller(p.getId(), page, 20)));
     }
 
     @PostMapping("/reviews/{reviewId}/reply")

@@ -16,6 +16,7 @@ public class CartItemResponse {
     private String productImage;
     private String variantInfo;
     private int quantity;
+    private int maxQuantity;
     private BigDecimal unitPrice;
     private BigDecimal lineTotal;
     private boolean priceChanged;

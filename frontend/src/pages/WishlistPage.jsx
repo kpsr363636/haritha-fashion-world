@@ -76,7 +76,7 @@ export default function WishlistPage() {
                 <button
                   type="button"
                   onClick={() => moveToCart(p.id)}
-                  disabled={movingId === p.id || !p.inStock}
+                  disabled={movingId === p.id || p.inStock === false}
                   className="flex-1 flex items-center justify-center gap-1.5 text-xs btn-outline py-2.5 disabled:opacity-50"
                 >
                   {movingId === p.id ? (

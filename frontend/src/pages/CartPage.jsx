@@ -37,14 +37,31 @@ export default function CartPage() {
   }
 
   const removeItem = async (id) => {
-    const res = await cartApi.removeItem(id)
-    setCart(res.data)
+    try {
+      const res = await cartApi.removeItem(id)
+      setCart(res.data)
+    } catch (err) {
+      alert(err?.message || 'Could not remove item')
+      refreshCart()
+    }
   }
 
   const updateQty = async (id, quantity) => {
-    if (quantity < 1) return
-    const res = await cartApi.updateItem(id, { quantity })
-    setCart(res.data)
+    if (quantity < 1) {
+      await removeItem(id)
+      return
+    }
+    const item = cart.items.find((i) => i.id === id)
+    if (item?.maxQuantity && quantity > item.maxQuantity) {
+      alert(`Only ${item.maxQuantity} item(s) available in stock`)
+      return
+    }
+    try {
+      const res = await cartApi.updateItem(id, { quantity })
+      setCart(res.data)
+    } catch (err) {
+      alert(err?.message || 'Could not update quantity — insufficient stock')
+    }
   }
 
   return (
@@ -54,20 +71,24 @@ export default function CartPage() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
+          <p className="text-sm text-gray-500 mb-2">{itemCount} item{itemCount !== 1 ? 's' : ''} in your bag</p>
           {cart.items.map((item) => (
-            <div key={item.id} className="surface-card p-4 md:p-5 flex gap-4 md:gap-5 group hover:shadow-card transition-shadow">
+            <div key={item.id} className="surface-card p-4 md:p-5 flex gap-4 md:gap-5 group hover:shadow-card hover:border-brand-100/80 transition-all duration-300 border border-transparent">
               <div className="w-24 h-28 md:w-28 md:h-32 bg-gradient-to-br from-cream-100 to-brand-50 rounded-xl overflow-hidden flex-shrink-0 shadow-sm">
                 <img src={resolveImageUrl(item.productImage)} alt={item.productName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={imageFallback} />
               </div>
               <div className="flex-1 min-w-0 flex flex-col">
                 <h3 className="font-semibold text-gray-900 leading-snug">{item.productName}</h3>
                 <p className="text-sm text-gray-500 mt-1">{item.variantInfo}</p>
+                {item.maxQuantity > 0 && item.maxQuantity <= 5 && (
+                  <p className="text-xs text-amber-600 mt-0.5">Only {item.maxQuantity} left in stock</p>
+                )}
                 <p className="font-bold text-brand mt-2 text-lg">{formatINR(item.unitPrice)}</p>
                 <div className="flex items-center justify-between mt-auto pt-3">
                   <div className="qty-control">
                     <button type="button" onClick={() => updateQty(item.id, item.quantity - 1)} className="qty-btn">−</button>
                     <span className="qty-value">{item.quantity}</span>
-                    <button type="button" onClick={() => updateQty(item.id, item.quantity + 1)} className="qty-btn">+</button>
+                    <button type="button" onClick={() => updateQty(item.id, item.quantity + 1)} className="qty-btn" disabled={item.maxQuantity && item.quantity >= item.maxQuantity}>+</button>
                   </div>
                   <button type="button" onClick={() => removeItem(item.id)} className="flex items-center gap-1.5 text-red-500 text-sm hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
