@@ -7,6 +7,7 @@ import com.harithafashion.entity.enums.PaymentStatus;
 import com.harithafashion.exception.BadRequestException;
 import com.harithafashion.exception.PaymentException;
 import com.harithafashion.exception.ResourceNotFoundException;
+import com.harithafashion.repository.OrderItemRepository;
 import com.harithafashion.repository.OrderRepository;
 import com.harithafashion.repository.PaymentRepository;
 import com.razorpay.RazorpayClient;
@@ -35,6 +36,8 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final StockReservationService stockReservationService;
     private final ShipmentService shipmentService;
 
     @Autowired(required = false)
@@ -57,6 +60,16 @@ public class PaymentService {
             throw new BadRequestException("Order already paid");
         }
         int amountPaise = order.getTotalAmount().multiply(new BigDecimal("100")).intValue();
+
+        var existing = paymentRepository.findTopByOrderIdOrderByCreatedAtDesc(orderId);
+        if (existing.isPresent() && "PENDING".equals(existing.get().getStatus())
+                && existing.get().getRazorpayOrderId() != null
+                && !existing.get().getRazorpayOrderId().startsWith("order_dev_")) {
+            String existingOrderId = existing.get().getRazorpayOrderId();
+            return Map.of("razorpayOrderId", existingOrderId, "amount", amountPaise,
+                    "currency", "INR", "keyId", keyId != null ? keyId : "");
+        }
+
         String razorpayOrderId;
         if (razorpayClient != null) {
             try {
@@ -116,6 +129,16 @@ public class PaymentService {
         order.setPaymentStatus(PaymentStatus.PAID);
         order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
+        boolean holdViaReservation = stockReservationService.hasReservationForOrder(order.getId());
+        orderItemRepository.findByOrderId(order.getId()).forEach(item -> {
+            if (item.getVariant() != null) {
+                if (holdViaReservation) {
+                    stockReservationService.confirmSale(item.getVariant().getId(), item.getQuantity());
+                }
+                stockReservationService.clearReservationForVariant(
+                        item.getVariant().getId(), order.getUser().getId());
+            }
+        });
         shipmentService.createShipment(order.getId());
     }
 

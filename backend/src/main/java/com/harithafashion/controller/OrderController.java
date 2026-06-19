@@ -2,6 +2,7 @@ package com.harithafashion.controller;
 
 import com.harithafashion.dto.request.*;
 import com.harithafashion.dto.response.*;
+import com.harithafashion.dto.response.OrderSummaryResponse;
 import com.harithafashion.entity.Order;
 import com.harithafashion.entity.Shipment;
 import com.harithafashion.repository.ShipmentRepository;
@@ -41,7 +42,7 @@ public class OrderController {
     }
 
     @GetMapping
-    public ApiResponse<PageResponse<Order>> listOrders(
+    public ApiResponse<PageResponse<OrderSummaryResponse>> listOrders(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {

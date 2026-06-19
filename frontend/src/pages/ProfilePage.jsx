@@ -241,12 +241,21 @@ export default function ProfilePage() {
 
         {tab === 'notifications' && prefs && (
           <>
-            <h1 className="text-xl font-bold mb-4">Notification Preferences</h1>
-            <div className="space-y-3">
+            <h2 className="font-display text-2xl font-semibold mb-2">Notification Preferences</h2>
+            <p className="text-sm text-gray-500 mb-6">Choose how you want to hear from us</p>
+            <div className="space-y-2">
               {prefFields.map(({ key, label }) => (
-                <label key={key} className="flex items-center justify-between border rounded-lg p-3 cursor-pointer">
-                  <span className="text-sm">{label}</span>
-                  <input type="checkbox" checked={!!prefs[key]} onChange={() => togglePref(key)} />
+                <label key={key} className="flex items-center justify-between surface-card-hover p-4 cursor-pointer">
+                  <span className="text-sm font-medium text-gray-800">{label}</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!!prefs[key]}
+                    onClick={() => togglePref(key)}
+                    className={`toggle-switch ${prefs[key] ? 'toggle-switch-on' : ''}`}
+                  >
+                    <span className="toggle-switch-knob" />
+                  </button>
                 </label>
               ))}
             </div>

@@ -21,4 +21,7 @@ public class ProductCardResponse {
     private String primaryImageUrl;
     private String categoryName;
     private Boolean inStock;
+    private String status;
+    private Boolean isFeatured;
+    private Integer totalStock;
 }

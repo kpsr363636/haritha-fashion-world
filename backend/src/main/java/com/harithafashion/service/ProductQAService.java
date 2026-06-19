@@ -1,5 +1,6 @@
 package com.harithafashion.service;
 
+import com.harithafashion.dto.response.SellerQuestionSummaryResponse;
 import com.harithafashion.entity.*;
 import com.harithafashion.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ public class ProductQAService {
     private final ProductAnswerRepository answerRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final SellerRepository sellerRepository;
 
     public List<ProductQuestion> getQuestions(UUID productId) {
         return questionRepository.findByProductIdAndIsApprovedTrueOrderByCreatedAtDesc(
@@ -51,5 +53,21 @@ public class ProductQAService {
 
     public Page<ProductQuestion> listPending(int page, int size) {
         return questionRepository.findByIsApprovedFalseOrderByCreatedAtDesc(PageRequest.of(page, size));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SellerQuestionSummaryResponse> listForSeller(UUID userId, int page, int size) {
+        Seller seller = sellerRepository.findByUserId(userId).orElseThrow();
+        return questionRepository.findBySellerId(seller.getId(), PageRequest.of(page, size))
+                .map(this::toSummary);
+    }
+
+    private SellerQuestionSummaryResponse toSummary(ProductQuestion q) {
+        return SellerQuestionSummaryResponse.builder()
+                .id(q.getId())
+                .productName(q.getProduct() != null ? q.getProduct().getName() : null)
+                .question(q.getQuestion())
+                .createdAt(q.getCreatedAt())
+                .build();
     }
 }

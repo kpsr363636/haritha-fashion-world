@@ -1,5 +1,8 @@
 package com.harithafashion.service;
 
+import com.harithafashion.dto.response.OrderSummaryResponse;
+import com.harithafashion.dto.response.SellerPayoutSummaryResponse;
+import com.harithafashion.dto.response.SellerSummaryResponse;
 import com.harithafashion.entity.*;
 import com.harithafashion.entity.enums.SellerStatus;
 import com.harithafashion.entity.enums.UserRole;
@@ -31,6 +34,7 @@ public class AdminService {
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
     private final SellerPayoutRepository sellerPayoutRepository;
+    private final OrderItemRepository orderItemRepository;
 
     public Map<String, Object> dashboard() {
         Map<String, Object> m = new HashMap<>();
@@ -44,8 +48,23 @@ public class AdminService {
         return m;
     }
 
-    public Page<Order> listOrders(int page, int size) {
-        return orderRepository.findAll(PageRequest.of(page, size));
+    public Page<OrderSummaryResponse> listOrders(int page, int size) {
+        return orderRepository.findAll(PageRequest.of(page, size))
+                .map(this::toOrderSummary);
+    }
+
+    private OrderSummaryResponse toOrderSummary(Order order) {
+        int itemCount = orderItemRepository.findByOrderId(order.getId()).size();
+        return OrderSummaryResponse.builder()
+                .id(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .status(order.getStatus())
+                .paymentStatus(order.getPaymentStatus())
+                .paymentMethod(order.getPaymentMethod())
+                .totalAmount(order.getTotalAmount())
+                .placedAt(order.getPlacedAt())
+                .itemCount(itemCount)
+                .build();
     }
 
     public Page<User> listUsers(int page, int size) {
@@ -73,15 +92,56 @@ public class AdminService {
     @Transactional
     public User updateRole(UUID id, String role) {
         User u = userRepository.findById(id).orElseThrow();
-        u.setRole(UserRole.valueOf(role));
-        return userRepository.save(u);
+        UserRole newRole = UserRole.valueOf(role);
+        u.setRole(newRole);
+        userRepository.save(u);
+        if (newRole == UserRole.SELLER && sellerRepository.findByUserId(id).isEmpty()) {
+            sellerRepository.save(Seller.builder()
+                    .user(u)
+                    .businessName(u.getName() + "'s Store")
+                    .businessType("Individual")
+                    .status(SellerStatus.PENDING)
+                    .build());
+        }
+        return u;
     }
 
-    public Page<Seller> listSellers(int page, int size, SellerStatus status) {
-        if (status != null) {
-            return sellerRepository.findByStatus(status, PageRequest.of(page, size));
-        }
-        return sellerRepository.findAll(PageRequest.of(page, size));
+    @Transactional(readOnly = true)
+    public Page<SellerSummaryResponse> listSellers(int page, int size, SellerStatus status) {
+        Page<Seller> sellers = status != null
+                ? sellerRepository.findByStatus(status, PageRequest.of(page, size))
+                : sellerRepository.findAll(PageRequest.of(page, size));
+        return sellers.map(this::toSellerSummary);
+    }
+
+    private SellerSummaryResponse toSellerSummary(Seller s) {
+        User u = s.getUser();
+        return SellerSummaryResponse.builder()
+                .id(s.getId())
+                .businessName(s.getBusinessName())
+                .businessType(s.getBusinessType())
+                .status(s.getStatus())
+                .userId(u != null ? u.getId() : null)
+                .userName(u != null ? u.getName() : null)
+                .userEmail(u != null ? u.getEmail() : null)
+                .avgRating(s.getAvgRating())
+                .fulfillmentRate(s.getFulfillmentRate())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SellerPayoutSummaryResponse> listPayouts(int page, int size) {
+        return sellerPayoutRepository.findAllByOrderByProcessedAtDesc(PageRequest.of(page, size))
+                .map(p -> SellerPayoutSummaryResponse.builder()
+                        .id(p.getId())
+                        .sellerId(p.getSeller() != null ? p.getSeller().getId() : null)
+                        .sellerName(p.getSeller() != null ? p.getSeller().getBusinessName() : null)
+                        .amount(p.getAmount())
+                        .status(p.getStatus())
+                        .notes(p.getNotes())
+                        .processedAt(p.getProcessedAt())
+                        .createdAt(p.getCreatedAt())
+                        .build());
     }
 
     @Transactional
@@ -178,9 +238,5 @@ public class AdminService {
 
     public void clearFraudFlag(UUID userId) {
         redisTemplate.delete("fraud:flag:" + userId);
-    }
-
-    public Page<?> listPayouts(int page, int size) {
-        return sellerPayoutRepository.findAllByOrderByProcessedAtDesc(PageRequest.of(page, size));
     }
 }

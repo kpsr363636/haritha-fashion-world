@@ -62,8 +62,14 @@ public class ReportService {
 
     public Map<String, Object> topProductsReport() {
         Map<String, Object> m = new HashMap<>();
-        m.put("products", productRepository.findTop10ByStatusOrderByCreatedAtDesc(
-                com.harithafashion.entity.enums.ProductStatus.ACTIVE));
+        var products = productRepository.findTop10ByStatusOrderByTotalSoldDesc(
+                com.harithafashion.entity.enums.ProductStatus.ACTIVE);
+        m.put("products", products.stream().map(p -> Map.of(
+                "id", p.getId(),
+                "name", p.getName(),
+                "totalSold", p.getTotalSold() != null ? p.getTotalSold() : 0,
+                "revenue", p.getBasePrice() != null ? p.getBasePrice() : BigDecimal.ZERO
+        )).toList());
         return m;
     }
 }

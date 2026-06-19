@@ -29,12 +29,47 @@ public class StockReservationService {
         variant.setReservedQuantity(variant.getReservedQuantity() + quantity);
         variantRepository.save(variant);
         User user = userRepository.findById(userId).orElseThrow();
-        reservationRepository.save(StockReservation.builder()
-                .variant(variant)
-                .user(user)
-                .quantity(quantity)
-                .expiresAt(LocalDateTime.now().plusMinutes(RESERVATION_MINUTES))
-                .build());
+        var existing = reservationRepository.findByVariantIdAndUserId(variantId, userId);
+        if (existing.isPresent()) {
+            StockReservation r = existing.get();
+            r.setQuantity(r.getQuantity() + quantity);
+            r.setExpiresAt(LocalDateTime.now().plusMinutes(RESERVATION_MINUTES));
+            reservationRepository.save(r);
+        } else {
+            reservationRepository.save(StockReservation.builder()
+                    .variant(variant)
+                    .user(user)
+                    .quantity(quantity)
+                    .expiresAt(LocalDateTime.now().plusMinutes(RESERVATION_MINUTES))
+                    .build());
+        }
+    }
+
+    @Transactional
+    public void linkReservationToOrder(UUID variantId, UUID userId, UUID orderId) {
+        reservationRepository.findByVariantIdAndUserId(variantId, userId).ifPresent(r -> {
+            r.setOrderId(orderId);
+            r.setExpiresAt(LocalDateTime.now().plusHours(24));
+            reservationRepository.save(r);
+        });
+    }
+
+    @Transactional
+    public void releaseForOrder(UUID orderId) {
+        for (StockReservation r : reservationRepository.findByOrderId(orderId)) {
+            release(r.getVariant().getId(), r.getUser().getId(), r.getQuantity());
+        }
+    }
+
+    @Transactional
+    public void clearReservationForVariant(UUID variantId, UUID userId) {
+        reservationRepository.findByVariantIdAndUserId(variantId, userId)
+                .ifPresent(reservationRepository::delete);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasReservationForOrder(UUID orderId) {
+        return !reservationRepository.findByOrderId(orderId).isEmpty();
     }
 
     @Transactional

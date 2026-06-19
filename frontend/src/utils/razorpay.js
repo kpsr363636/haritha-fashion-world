@@ -8,28 +8,68 @@ export const loadRazorpay = () =>
     document.body.appendChild(script)
   })
 
-export const openRazorpayCheckout = async ({ keyId, orderId, amount, name, email, mobile, onSuccess, onFailure }) => {
+/**
+ * Opens Razorpay Checkout.
+ * Redirect mode (UPI return) requires the site URL to be whitelisted in Razorpay Dashboard.
+ * Set VITE_RAZORPAY_REDIRECT=true only after adding your domain in Razorpay → Website & App Settings.
+ */
+export const openRazorpayCheckout = async ({
+  keyId,
+  orderId,
+  amount,
+  name,
+  email,
+  mobile,
+  callbackPath,
+  onSuccess,
+  onFailure,
+}) => {
   const loaded = await loadRazorpay()
-  if (!loaded) { onFailure?.({ message: 'Razorpay SDK failed to load' }); return }
+  if (!loaded) {
+    onFailure?.({ message: 'Razorpay SDK failed to load' })
+    return
+  }
+
+  const redirectEnabled = import.meta.env.VITE_RAZORPAY_REDIRECT === 'true'
+  const useRedirect = redirectEnabled && Boolean(callbackPath && orderId && !orderId.startsWith('order_dev_'))
   let paymentCompleted = false
+
   const options = {
     key: keyId,
-    amount: amount * 100,
     currency: 'INR',
     name: 'Haritha Fashion World',
     description: 'Order Payment',
-    order_id: orderId,
     prefill: { name, email, contact: mobile },
     theme: { color: '#B5476A' },
-    handler: (response) => {
+  }
+
+  if (orderId) {
+    options.order_id = orderId
+  } else if (amount != null) {
+    options.amount = Math.round(Number(amount) * 100)
+  }
+
+  if (useRedirect) {
+    const siteOrigin = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/$/, '')
+    options.callback_url = `${siteOrigin}${callbackPath}`
+    options.redirect = true
+  } else {
+    options.handler = (response) => {
       paymentCompleted = true
-      onSuccess?.(response)
-    },
-    modal: {
+      Promise.resolve(onSuccess?.(response)).catch((err) => {
+        onFailure?.({ message: err?.message || 'Payment verification failed' })
+      })
+    }
+    options.modal = {
       ondismiss: () => {
         if (!paymentCompleted) onFailure?.({ message: 'Payment cancelled' })
-      }
+      },
     }
   }
-  new window.Razorpay(options).open()
+
+  const rzp = new window.Razorpay(options)
+  rzp.on('payment.failed', (response) => {
+    onFailure?.({ message: response?.error?.description || 'Payment failed' })
+  })
+  rzp.open()
 }

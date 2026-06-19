@@ -99,9 +99,12 @@ public class CartService {
             BigDecimal gst = GstCalculator.extractGst(lineTotal, gstRate);
             gstTotal = gstTotal.add(gst);
             subtotal = subtotal.add(lineTotal);
-            String image = imageRepository.findByProductIdAndIsPrimaryTrue(p.getId())
+            String image = imageRepository.findPrimaryForProduct(p.getId())
                     .map(ProductImage::getImageUrl).orElse(null);
             String variantInfo = buildVariantInfo(variant);
+            int userOwnReserved = reservationRepository.findByVariantIdAndUserId(variant.getId(), userId)
+                    .map(r -> r.getQuantity()).orElse(0);
+            int maxQuantity = variant.getStockQuantity() - variant.getReservedQuantity() + userOwnReserved;
             items.add(CartItemResponse.builder()
                     .id(ci.getId())
                     .productId(p.getId())
@@ -110,6 +113,7 @@ public class CartService {
                     .productImage(image)
                     .variantInfo(variantInfo)
                     .quantity(ci.getQuantity())
+                    .maxQuantity(maxQuantity)
                     .unitPrice(unitPrice)
                     .lineTotal(lineTotal)
                     .priceChanged(false)
@@ -144,8 +148,12 @@ public class CartService {
         }
         int delta = quantity - item.getQuantity();
         if (delta > 0) {
-            int available = item.getVariant().getStockQuantity() - item.getVariant().getReservedQuantity();
-            if (available < delta) throw new OutOfStockException("Insufficient stock");
+            int userOwnReserved = reservationRepository.findByVariantIdAndUserId(item.getVariant().getId(), userId)
+                    .map(r -> r.getQuantity()).orElse(0);
+            int available = item.getVariant().getStockQuantity() - item.getVariant().getReservedQuantity() + userOwnReserved;
+            if (available < quantity) {
+                throw new OutOfStockException("Only " + available + " item(s) available in stock");
+            }
             stockReservationService.reserve(item.getVariant().getId(), userId, delta);
         } else if (delta < 0) {
             stockReservationService.release(item.getVariant().getId(), userId, -delta);

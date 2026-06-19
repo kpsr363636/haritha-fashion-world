@@ -1,6 +1,5 @@
 package com.harithafashion.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -12,12 +11,14 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class S3Service {
 
@@ -32,11 +33,30 @@ public class S3Service {
     @Value("${aws.region}")
     private String region;
 
-    private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024;   // 10 MB
-    private static final long MAX_VIDEO_SIZE = 100 * 1024 * 1024;  // 100 MB
+    @Value("${aws.access-key-id:}")
+    private String accessKeyId;
+
+    @Value("${app.upload.local-enabled:true}")
+    private boolean localEnabled;
+
+    @Value("${app.upload.local-dir:../frontend/public/uploads}")
+    private String localDir;
+
+    @Value("${app.upload.local-base-url:http://localhost:5173/uploads}")
+    private String localBaseUrl;
+
+    private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+    private static final long MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+
+    public S3Service(S3Client s3Client) {
+        this.s3Client = s3Client;
+    }
 
     public Map<String, String> upload(MultipartFile file, String folder) throws IOException {
         validateFile(file, folder);
+        if (shouldUseLocalStorage()) {
+            return uploadLocal(file, folder);
+        }
         String ext = getExtension(file.getOriginalFilename());
         String key = folder + "/" + UUID.randomUUID() + ext;
         try {
@@ -49,24 +69,29 @@ public class S3Service {
                             .build(),
                     RequestBody.fromBytes(file.getBytes()));
             log.info("Uploaded {} bytes → s3://{}/{}", file.getSize(), bucket, key);
-        } catch (S3Exception e) {
-            log.error("S3 upload failed for key {}: {}", key, e.awsErrorDetails().errorMessage());
-            throw new RuntimeException("File upload failed: " + e.awsErrorDetails().errorMessage(), e);
+            return Map.of("url", buildUrl(key), "key", key, "bucket", bucket);
+        } catch (Exception e) {
+            log.warn("S3 upload failed, using local storage: {}", e.getMessage());
+            return uploadLocal(file, folder);
         }
-        return Map.of("url", buildUrl(key), "key", key, "bucket", bucket);
     }
 
     public void delete(String key) {
         if (key == null || key.isBlank()) return;
+        if (shouldUseLocalStorage() || key.startsWith("/uploads") || key.contains("/uploads/")) {
+            return;
+        }
         try {
             s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
-            log.info("Deleted s3://{}/{}", bucket, key);
         } catch (S3Exception e) {
             log.warn("S3 delete failed for {}: {}", key, e.awsErrorDetails().errorMessage());
         }
     }
 
     public Map<String, String> presignedUrl(String fileName, String contentType) {
+        if (shouldUseLocalStorage()) {
+            throw new UnsupportedOperationException("Use multipart upload in local dev mode");
+        }
         String ext = getExtension(fileName);
         String key = "uploads/" + UUID.randomUUID() + ext;
         try (S3Presigner presigner = S3Presigner.builder()
@@ -92,6 +117,22 @@ public class S3Service {
             return cloudfrontDomain.replaceAll("/$", "") + "/" + key;
         }
         return "https://" + bucket + ".s3." + region + ".amazonaws.com/" + key;
+    }
+
+    private boolean shouldUseLocalStorage() {
+        return localEnabled && (accessKeyId == null || accessKeyId.isBlank());
+    }
+
+    private Map<String, String> uploadLocal(MultipartFile file, String folder) throws IOException {
+        String ext = getExtension(file.getOriginalFilename());
+        String filename = UUID.randomUUID() + ext;
+        Path dir = Paths.get(localDir, folder).toAbsolutePath().normalize();
+        Files.createDirectories(dir);
+        Path target = dir.resolve(filename);
+        Files.write(target, file.getBytes());
+        String publicUrl = localBaseUrl.replaceAll("/$", "") + "/" + folder + "/" + filename;
+        log.info("Local upload → {}", publicUrl);
+        return Map.of("url", publicUrl, "key", folder + "/" + filename, "bucket", "local");
     }
 
     private void validateFile(MultipartFile file, String folder) {
