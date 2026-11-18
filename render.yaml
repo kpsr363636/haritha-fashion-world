@@ -130,7 +130,7 @@ services:
     routes:
       - type: rewrite
         source: /api/*
-        destination: https://haritha-backend-3tea.onrender.com/api/*
+        destination: https://haritha-backend-31ea.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
