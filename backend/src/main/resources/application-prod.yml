@@ -19,7 +19,7 @@ logging:
     org.hibernate: WARN
     root: WARN
   file:
-    name: /var/log/haritha/app.log
+    name: ${LOG_FILE:/var/log/haritha/app.log}
   logback:
     rollingpolicy:
       max-file-size: 50MB
@@ -28,12 +28,16 @@ logging:
 server:
   forward-headers-strategy: framework
   tomcat:
-    max-threads: 200
-    min-spare-threads: 20
+    threads:
+      max: ${TOMCAT_MAX_THREADS:200}
+      min-spare: ${TOMCAT_MIN_SPARE_THREADS:20}
     max-connections: 8192
     accept-count: 100
 
 management:
+  health:
+    mail:
+      enabled: false   # don't mark the app unhealthy when SMTP is unreachable
   endpoint:
     health:
       show-details: never
@@ -44,8 +48,8 @@ management:
 
 app:
   cors:
-    allowed-origins: ${CORS_ORIGINS:https://www.harithafashion.com,https://harithafashion.com}
-  frontend-url: ${FRONTEND_URL:https://www.harithafashion.com}
+    allowed-origins: ${CORS_ORIGINS:https://harithafashionworld.com,https://www.harithafashionworld.com}
+  frontend-url: ${FRONTEND_URL:https://harithafashionworld.com}
 
 scheduler:
   abandoned-cart:

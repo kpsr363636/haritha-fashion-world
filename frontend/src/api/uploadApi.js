@@ -1,44 +1,35 @@
 import api from './axiosInstance'
 
 export const uploadApi = {
-  /** Get a presigned S3 URL for uploading an image */
-  presignImage: (filename, contentType) =>
-    api.get('/upload/presign', { params: { filename, contentType } }),
+  /** Upload an image through the backend. Resolves to { url, key, bucket }. */
+  uploadImage: (file, onProgress) => upload('/upload/image', file, onProgress),
 
-  /** Get a presigned S3 URL for uploading a video */
-  presignVideo: (filename, contentType) =>
-    api.get('/upload/presign-video', { params: { filename, contentType } }),
+  /** Upload a video through the backend (seller/admin only). Resolves to { url, key, bucket }. */
+  uploadVideo: (file, onProgress) => upload('/upload/video', file, onProgress),
 
-  /** Delete an object from S3 by its key */
-  deleteObject: (key) => api.delete('/upload', { params: { key } }),
+  /** Delete a stored file by its key */
+  deleteObject: (key) => api.delete('/upload', { data: { key } }),
 
   /**
-   * Upload a file directly to S3 using a presigned URL.
-   * Returns the public CloudFront/S3 URL.
+   * Upload a file (image or video) and return its public URL.
+   * Name kept for existing callers; storage may be local disk or S3/R2.
    */
   uploadToS3: async (file, onProgress) => {
-    const ext = file.name.split('.').pop()
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
     const isVideo = file.type.startsWith('video/')
-
-    const { data: presign } = isVideo
-      ? await uploadApi.presignVideo(filename, file.type)
-      : await uploadApi.presignImage(filename, file.type)
-
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('PUT', presign.uploadUrl)
-      xhr.setRequestHeader('Content-Type', file.type)
-      if (onProgress) {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
-        }
-      }
-      xhr.onload = () => (xhr.status === 200 ? resolve() : reject(new Error('Upload failed')))
-      xhr.onerror = () => reject(new Error('Upload failed'))
-      xhr.send(file)
-    })
-
-    return presign.publicUrl
+    const res = isVideo
+      ? await uploadApi.uploadVideo(file, onProgress)
+      : await uploadApi.uploadImage(file, onProgress)
+    return res.data.url
   }
+}
+
+function upload(path, file, onProgress) {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post(path, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress
+      ? (e) => e.total && onProgress(Math.round((e.loaded / e.total) * 100))
+      : undefined
+  })
 }

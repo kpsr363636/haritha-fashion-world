@@ -1,0 +1,34 @@
+# Caddy obtains and renews HTTPS certificates (Let's Encrypt) automatically.
+# DNS for {$DOMAIN}, www.{$DOMAIN} and api.{$DOMAIN} must point at this server.
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Spring Boot API (context path /api)
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	# Uploaded product images / videos (storage.type=local)
+	handle /media/* {
+		uri strip_prefix /media
+		root * /srv/media
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# React SPA
+	handle {
+		reverse_proxy frontend:80
+	}
+}
+
+# Kept for existing integrations (OAuth callbacks, payment webhooks) that use the api subdomain
+api.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy backend:8080
+}

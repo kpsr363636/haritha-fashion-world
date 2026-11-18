@@ -12,16 +12,34 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * File storage. {@code storage.type=local} writes to {@code storage.local.dir} (served by the
+ * reverse proxy under {@code storage.public-url}); {@code storage.type=s3} uses any S3-compatible
+ * bucket (AWS S3, Cloudflare R2).
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class S3Service {
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
+
+    @Value("${storage.type:s3}")
+    private String storageType;
+
+    @Value("${storage.local.dir:/data/media}")
+    private String localDir;
+
+    @Value("${storage.public-url:}")
+    private String publicUrl;
 
     @Value("${aws.s3.bucket}")
     private String bucket;
@@ -35,10 +53,23 @@ public class S3Service {
     private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024;   // 10 MB
     private static final long MAX_VIDEO_SIZE = 100 * 1024 * 1024;  // 100 MB
 
+    private boolean isLocal() {
+        return "local".equalsIgnoreCase(storageType);
+    }
+
     public Map<String, String> upload(MultipartFile file, String folder) throws IOException {
         validateFile(file, folder);
         String ext = getExtension(file.getOriginalFilename());
         String key = folder + "/" + UUID.randomUUID() + ext;
+
+        if (isLocal()) {
+            Path target = resolveLocal(key);
+            Files.createDirectories(target.getParent());
+            file.transferTo(target);
+            log.info("Stored {} bytes → {}", file.getSize(), target);
+            return Map.of("url", buildUrl(key), "key", key, "bucket", "local");
+        }
+
         try {
             s3Client.putObject(
                     PutObjectRequest.builder()
@@ -58,6 +89,15 @@ public class S3Service {
 
     public void delete(String key) {
         if (key == null || key.isBlank()) return;
+        if (isLocal()) {
+            try {
+                Files.deleteIfExists(resolveLocal(key));
+                log.info("Deleted local file {}", key);
+            } catch (IOException | IllegalArgumentException e) {
+                log.warn("Local delete failed for {}: {}", key, e.getMessage());
+            }
+            return;
+        }
         try {
             s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
             log.info("Deleted s3://{}/{}", bucket, key);
@@ -67,12 +107,13 @@ public class S3Service {
     }
 
     public Map<String, String> presignedUrl(String fileName, String contentType) {
+        if (isLocal()) {
+            throw new IllegalStateException("Direct uploads are not available; use /upload/image or /upload/video");
+        }
         String ext = getExtension(fileName);
         String key = "uploads/" + UUID.randomUUID() + ext;
-        try (S3Presigner presigner = S3Presigner.builder()
-                .region(software.amazon.awssdk.regions.Region.of(region))
-                .build()) {
-            var presigned = presigner.presignPutObject(PutObjectPresignRequest.builder()
+        try {
+            var presigned = s3Presigner.presignPutObject(PutObjectPresignRequest.builder()
                     .signatureDuration(Duration.ofMinutes(15))
                     .putObjectRequest(b -> b.bucket(bucket).key(key).contentType(contentType))
                     .build());
@@ -88,10 +129,26 @@ public class S3Service {
     }
 
     public String buildUrl(String key) {
+        if (publicUrl != null && !publicUrl.isBlank()) {
+            return publicUrl.replaceAll("/$", "") + "/" + key;
+        }
         if (cloudfrontDomain != null && !cloudfrontDomain.isBlank()) {
             return cloudfrontDomain.replaceAll("/$", "") + "/" + key;
         }
+        if (isLocal()) {
+            return "/media/" + key;
+        }
         return "https://" + bucket + ".s3." + region + ".amazonaws.com/" + key;
+    }
+
+    /** Resolves a storage key inside the local media dir, rejecting path traversal. */
+    private Path resolveLocal(String key) {
+        Path root = Paths.get(localDir).toAbsolutePath().normalize();
+        Path target = root.resolve(key).normalize();
+        if (!target.startsWith(root)) {
+            throw new IllegalArgumentException("Invalid file key");
+        }
+        return target;
     }
 
     private void validateFile(MultipartFile file, String folder) {
@@ -112,6 +169,8 @@ public class S3Service {
 
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) return "";
-        return filename.substring(filename.lastIndexOf('.'));
+        String ext = filename.substring(filename.lastIndexOf('.'));
+        // keep only safe extension characters
+        return ext.matches("\\.[A-Za-z0-9]{1,8}") ? ext.toLowerCase() : "";
     }
 }

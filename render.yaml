@@ -1,0 +1,100 @@
+# Render Blueprint — backend API on Render's free plan.
+# Database: Supabase Postgres · Redis: Upstash · Images: Supabase Storage (S3 API)
+# Values marked sync:false are entered in the Render dashboard (never committed).
+services:
+  - type: web
+    name: haritha-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/actuator/health
+    autoDeploy: true
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      # Fit Spring Boot into 512 MB
+      - key: JAVA_OPTS
+        value: >-
+          -Xms128m -Xmx280m -Xss512k -XX:MaxMetaspaceSize=160m
+          -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=32m
+          -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:CICompilerCount=2
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: DB_POOL_MIN_IDLE
+        value: "1"
+      - key: TOMCAT_MAX_THREADS
+        value: "40"
+      - key: TOMCAT_MIN_SPARE_THREADS
+        value: "4"
+      - key: LOG_FILE
+        value: /tmp/app.log
+
+      # Supabase Postgres — Session pooler (IPv4), e.g.
+      # jdbc:postgresql://aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # Upstash Redis
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        value: "6379"
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: REDIS_SSL
+        value: "true"
+
+      # Supabase Storage (S3-compatible)
+      - key: STORAGE_TYPE
+        value: s3
+      - key: S3_BUCKET
+        value: media
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: S3_ENDPOINT
+        sync: false            # https://<project-ref>.supabase.co/storage/v1/s3
+      - key: STORAGE_PUBLIC_URL
+        sync: false            # https://<project-ref>.supabase.co/storage/v1/object/public/media
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://harithafashionworld.com,https://www.harithafashionworld.com
+      - key: FRONTEND_URL
+        value: https://harithafashionworld.com
+
+      # Email (Brevo / Hostinger SMTP) — optional
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        value: noreply@harithafashionworld.com
+
+      # Integrations — optional, add when available
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: MSG91_API_KEY
+        sync: false
+      - key: SHIPROCKET_EMAIL
+        sync: false
+      - key: SHIPROCKET_PASSWORD
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false

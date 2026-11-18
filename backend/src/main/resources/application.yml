@@ -7,8 +7,8 @@ spring:
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
       connection-timeout: 30000
   jpa:
     hibernate:
@@ -37,10 +37,11 @@ spring:
       max-file-size: 50MB
       max-request-size: 55MB
   mail:
-    host: email-smtp.${AWS_REGION:ap-south-1}.amazonaws.com
-    port: 587
-    username: ${AWS_SES_SMTP_USER:}
-    password: ${AWS_SES_SMTP_PASS:}
+    # Any SMTP server: Hostinger mail (smtp.hostinger.com:587), Brevo (smtp-relay.brevo.com:587), AWS SES…
+    host: ${MAIL_HOST:email-smtp.${AWS_REGION:ap-south-1}.amazonaws.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:${AWS_SES_SMTP_USER:}}
+    password: ${MAIL_PASSWORD:${AWS_SES_SMTP_PASS:}}
     properties:
       mail:
         smtp:
@@ -57,9 +58,17 @@ aws:
   s3:
     bucket: ${S3_BUCKET:haritha-fashion-media}
     cloudfront-domain: ${CLOUDFRONT_DOMAIN:}
+    endpoint: ${S3_ENDPOINT:}
   ses:
-    from-email: noreply@harithafashion.com
-    from-name: Haritha Fashion World
+    from-email: ${MAIL_FROM:noreply@harithafashionworld.com}
+    from-name: ${MAIL_FROM_NAME:Haritha Fashion World}
+
+# File storage: "local" (disk on the server, served at /media) or "s3" (AWS S3 / Cloudflare R2)
+storage:
+  type: ${STORAGE_TYPE:s3}
+  local:
+    dir: ${STORAGE_LOCAL_DIR:/data/media}
+  public-url: ${STORAGE_PUBLIC_URL:}
 
 msg91:
   api-key: ${MSG91_API_KEY:}
@@ -97,7 +106,7 @@ scheduler:
     enabled: true
 
 server:
-  port: 8080
+  port: ${PORT:8080}
   servlet:
     context-path: /api
   compression:
