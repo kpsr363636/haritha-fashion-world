@@ -16,6 +16,16 @@ public interface ProductImageRepository extends JpaRepository<ProductImage, UUID
 
     List<ProductImage> findByProductIdOrderBySortOrderAsc(UUID productId);
 
+    /** Prefer list query — multiple rows may be marked primary in legacy data. */
+    List<ProductImage> findByProductIdAndIsPrimaryTrueOrderBySortOrderAsc(UUID productId);
+
+    default Optional<ProductImage> findPrimaryForProduct(UUID productId) {
+        List<ProductImage> primaries = findByProductIdAndIsPrimaryTrueOrderBySortOrderAsc(productId);
+        if (!primaries.isEmpty()) return Optional.of(primaries.get(0));
+        return findByProductIdOrderBySortOrderAsc(productId).stream().findFirst();
+    }
+
+    @Deprecated
     Optional<ProductImage> findByProductIdAndIsPrimaryTrue(UUID productId);
 
     long countByProductId(UUID productId);

@@ -16,6 +16,7 @@ import WishlistPage from './pages/WishlistPage'
 import ProfilePage from './pages/ProfilePage'
 import OrderTrackingPage from './pages/OrderTrackingPage'
 import OrderDetailPage from './pages/OrderDetailPage'
+import PaymentReturnPage from './pages/PaymentReturnPage'
 import SupportPage from './pages/SupportPage'
 import SizeGuidePage from './pages/SizeGuidePage'
 import ReturnPage from './pages/ReturnPage'
@@ -34,8 +35,14 @@ function PageViewTracker() {
 export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-page-gradient">
-      <div className="promo-strip hidden sm:block">
-        Free delivery on orders above ₹499 · New arrivals every week · Use code WELCOME10
+      <div className="promo-strip">
+        <span className="inline-flex items-center justify-center gap-2 flex-wrap">
+          <span>✨ Free delivery on orders above ₹499</span>
+          <span className="hidden sm:inline opacity-40">·</span>
+          <span className="hidden sm:inline">New arrivals weekly</span>
+          <span className="hidden md:inline opacity-40">·</span>
+          <span className="hidden md:inline font-semibold text-gold-light">Use code WELCOME10</span>
+        </span>
       </div>
       <PageViewTracker />
       <Navbar />
@@ -50,6 +57,7 @@ export default function App() {
           <Route path="/products/:slug" element={<ProductDetailPage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/payment/return" element={<PaymentReturnPage />} />
           <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/orders" element={<OrderTrackingPage />} />

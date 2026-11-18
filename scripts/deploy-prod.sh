@@ -26,7 +26,7 @@ deploy_backend() {
   echo ""
   echo ">>> Building backend JAR..."
   cd backend
-  ./mvnw clean package -DskipTests -Pprod
+  ./mvnw clean package -DskipTests
   cd ..
 
   echo ">>> Uploading JAR to EC2..."

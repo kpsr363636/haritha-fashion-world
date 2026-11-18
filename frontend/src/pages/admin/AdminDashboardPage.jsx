@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { adminApi } from '../../api/adminApi'
 import ProtectedRoute from '../../components/common/ProtectedRoute'
+import { DashboardTabBar, DashboardStatGrid, DashboardEmpty, DashboardAlert, DashboardListItem } from '../../components/dashboard/DashboardUi'
+import LoadingScreen from '../../components/ui/LoadingScreen'
 import { formatINR, formatDate } from '../../utils/formatters'
+import { resolveImageUrl } from '../../utils/images'
+import { ShoppingBag, Users, Package, Store } from 'lucide-react'
 
 function AdminDashboardContent() {
   const [tab, setTab] = useState('overview')
@@ -23,20 +27,30 @@ function AdminDashboardContent() {
   const [topProducts, setTopProducts] = useState([])
   const [impersonateMsg, setImpersonateMsg] = useState({})
   const [bannerForm, setBannerForm] = useState({ title: '', imageUrl: '', linkUrl: '', position: 'HOME_HERO' })
-  const [couponForm, setCouponForm] = useState({ code: '', discountType: 'PERCENT', discountValue: 10, minOrderAmount: 499 })
+  const [couponForm, setCouponForm] = useState({ code: '', type: 'PERCENTAGE', discountValue: 10, minOrderAmount: 499 })
+  const [editingProduct, setEditingProduct] = useState(null)
+  const [productForm, setProductForm] = useState({ name: '', description: '', basePrice: '', mrp: '', variants: [] })
+  const [productEditLoading, setProductEditLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
 
   const load = () => {
-    adminApi.dashboard().then((r) => setStats(r.data)).catch(() => {})
-    adminApi.orders().then((r) => setOrders(r.data?.content || [])).catch(() => {})
-    adminApi.users().then((r) => setUsers(r.data?.content || [])).catch(() => {})
-    adminApi.sellers().then((r) => setSellers(r.data?.content || [])).catch(() => {})
-    adminApi.products().then((r) => setProducts(r.data?.content || [])).catch(() => {})
-    adminApi.returns(0, 'REQUESTED').then((r) => setReturns(r.data?.content || [])).catch(() => {})
-    adminApi.supportTickets().then((r) => setTickets(r.data?.content || [])).catch(() => {})
-    adminApi.banners().then((r) => setBanners(r.data || [])).catch(() => {})
-    adminApi.coupons().then((r) => setCoupons(r.data?.content || [])).catch(() => {})
-    adminApi.pendingReviews().then((r) => setPendingReviews(r.data?.content || [])).catch(() => {})
-    adminApi.pendingQuestions().then((r) => setPendingQuestions(r.data?.content || [])).catch(() => {})
+    setLoading(true)
+    setLoadError('')
+    const tasks = [
+      adminApi.dashboard().then((r) => setStats(r.data)).catch(() => setLoadError('Dashboard stats failed to load')),
+      adminApi.orders().then((r) => setOrders(r.data?.content || [])).catch(() => {}),
+      adminApi.users().then((r) => setUsers(r.data?.content || [])).catch(() => {}),
+      adminApi.sellers().then((r) => setSellers(r.data?.content || [])).catch(() => {}),
+      adminApi.products().then((r) => setProducts(r.data?.content || [])).catch(() => setLoadError('Product list failed to load')),
+      adminApi.returns(0, 'REQUESTED').then((r) => setReturns(r.data?.content || [])).catch(() => {}),
+      adminApi.supportTickets().then((r) => setTickets(r.data?.content || [])).catch(() => {}),
+      adminApi.banners().then((r) => setBanners(r.data || [])).catch(() => {}),
+      adminApi.coupons().then((r) => setCoupons(r.data?.content || [])).catch(() => {}),
+      adminApi.pendingReviews().then((r) => setPendingReviews(r.data?.content || [])).catch(() => {}),
+      adminApi.pendingQuestions().then((r) => setPendingQuestions(r.data?.content || [])).catch(() => {})
+    ]
+    Promise.all(tasks).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -49,8 +63,8 @@ function AdminDashboardContent() {
 
   const loadExtendedReports = () => {
     adminApi.sellerPayouts().then((r) => setSellerPayouts(r.data?.content || [])).catch(() => {})
-    adminApi.fraudQueue().then((r) => setFraudQueue(r.data || [])).catch(() => {})
-    adminApi.topProductsReport().then((r) => setTopProducts(r.data || [])).catch(() => {})
+    adminApi.fraudQueue().then((r) => setFraudQueue(r.data?.content || [])).catch(() => {})
+    adminApi.topProductsReport().then((r) => setTopProducts(r.data?.products || [])).catch(() => {})
   }
 
   const impersonate = async (userId) => {
@@ -62,126 +76,255 @@ function AdminDashboardContent() {
     }
   }
 
-  const tabs = ['overview', 'orders', 'users', 'sellers', 'products', 'returns', 'support', 'banners', 'coupons', 'moderation', 'payouts', 'fraud', 'reports']
+  const startEditProduct = async (id) => {
+    setProductEditLoading(true)
+    try {
+      const res = await adminApi.getProduct(id)
+      const p = res.data
+      setEditingProduct(id)
+      setProductForm({
+        name: p.name,
+        description: p.description || '',
+        basePrice: p.basePrice,
+        mrp: p.mrp,
+        variants: p.variants?.map((v) => ({ id: v.id, size: v.size || v.color, stockQuantity: v.stockQuantity })) || []
+      })
+      setTab('edit-product')
+    } catch {
+      alert('Could not load product details')
+    } finally {
+      setProductEditLoading(false)
+    }
+  }
+
+  const saveProductEdit = async (e) => {
+    e.preventDefault()
+    if (!editingProduct) return
+    try {
+      await adminApi.updateProduct(editingProduct, {
+        name: productForm.name,
+        description: productForm.description,
+        basePrice: Number(productForm.basePrice),
+        mrp: Number(productForm.mrp)
+      })
+      for (const v of productForm.variants) {
+        if (v.id) await adminApi.updateProductStock(editingProduct, v.id, Number(v.stockQuantity))
+      }
+      setEditingProduct(null)
+      setTab('products')
+      load()
+    } catch (err) {
+      alert(err?.message || 'Failed to save product')
+    }
+  }
+
+  const tabDefs = [
+    { id: 'overview', label: 'overview' },
+    { id: 'orders', label: 'orders' },
+    { id: 'users', label: 'users' },
+    { id: 'sellers', label: 'sellers' },
+    { id: 'products', label: 'products' },
+    ...(editingProduct ? [{ id: 'edit-product', label: 'edit product' }] : []),
+    { id: 'returns', label: 'returns' },
+    { id: 'support', label: 'support' },
+    { id: 'banners', label: 'banners' },
+    { id: 'coupons', label: 'coupons' },
+    { id: 'moderation', label: 'moderation' },
+    { id: 'payouts', label: 'payouts' },
+    { id: 'fraud', label: 'fraud' },
+    { id: 'reports', label: 'reports' }
+  ]
+  const tabCounts = {
+    orders: orders.length,
+    users: users.length,
+    sellers: sellers.length,
+    products: products.length,
+    returns: returns.length,
+    support: tickets.length
+  }
+
+  if (loading && !stats) return <LoadingScreen message="Loading admin dashboard..." />
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
-      <div className="flex flex-wrap gap-2 mb-6">
-        {tabs.map((t) => (
-          <button key={t} type="button" onClick={() => {
-            setTab(t)
-            if (t === 'reports') { loadSalesReport(); loadExtendedReports() }
-            if (t === 'payouts') loadExtendedReports()
-            if (t === 'fraud') loadExtendedReports()
-          }} className={`px-4 py-2 rounded-lg text-sm capitalize ${tab === t ? 'bg-brand text-white' : 'bg-gray-100'}`}>{t}</button>
-        ))}
+    <div className="page-shell">
+      <div className="mb-8">
+        <p className="text-xs uppercase tracking-[0.15em] text-brand font-medium mb-1">Platform Admin</p>
+        <h1 className="page-title">Admin Dashboard</h1>
+        <p className="page-subtitle">Manage orders, users, sellers, and catalog</p>
       </div>
+      <DashboardAlert message={loadError} type="error" />
+      <DashboardTabBar
+        tabs={tabDefs}
+        active={tab}
+        counts={tabCounts}
+        onChange={(t) => {
+          setTab(t)
+          if (t === 'reports') { loadSalesReport(); loadExtendedReports() }
+          if (t === 'payouts') loadExtendedReports()
+          if (t === 'fraud') loadExtendedReports()
+        }}
+      />
 
       {tab === 'overview' && stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Orders', value: stats.totalOrders },
-            { label: 'Revenue', value: formatINR(stats.totalRevenue || 0) },
-            { label: 'Users', value: stats.totalUsers },
-            { label: 'Pending Returns', value: stats.pendingReturns ?? 0 }
-          ].map((k) => (
-            <div key={k.label} className="border rounded-xl p-4 bg-gray-50">
-              <p className="text-sm text-gray-500">{k.label}</p>
-              <p className="text-2xl font-bold">{k.value}</p>
-            </div>
-          ))}
-        </div>
+        <DashboardStatGrid stats={[
+          { label: 'Orders', value: stats.totalOrders },
+          { label: 'Revenue', value: formatINR(stats.totalRevenue || 0) },
+          { label: 'Users', value: stats.totalUsers },
+          { label: 'Pending Returns', value: stats.pendingReturns ?? 0 }
+        ]} />
       )}
 
       {tab === 'orders' && (
-        <div className="space-y-3">
-          {orders.map((o) => (
-            <div key={o.id} className="border rounded-lg p-4 flex flex-wrap justify-between items-center gap-2">
-              <div>
-                <p className="font-medium">{o.orderNumber}</p>
-                <p className="text-sm text-gray-500">{formatDate(o.placedAt)} · {formatINR(o.totalAmount)}</p>
-              </div>
-              <div className="flex gap-2 items-center flex-wrap">
-                <span className="text-xs px-2 py-1 bg-brand-50 text-brand rounded">{o.status}</span>
-                {(o.status === 'PLACED' || o.status === 'CONFIRMED') && (
-                  <button type="button" className="text-sm text-brand" onClick={() => adminApi.shipOrder(o.id).then(load)}>Mark shipped</button>
-                )}
-                {o.status === 'SHIPPED' && (
-                  <button type="button" className="text-sm text-brand" onClick={() => adminApi.deliverOrder(o.id).then(load)}>Mark delivered</button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        orders.length === 0 ? (
+          <DashboardEmpty icon={ShoppingBag} title="No orders yet" message="Orders will appear here when customers checkout." />
+        ) : (
+          <div className="space-y-3">
+            {orders.map((o) => (
+              <DashboardListItem key={o.id}>
+                <div className="flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{o.orderNumber}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{formatDate(o.placedAt)} · {formatINR(o.totalAmount)}</p>
+                  </div>
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <span className="text-xs px-2.5 py-1 bg-brand/10 text-brand rounded-lg font-medium">{o.status}</span>
+                    {(o.status === 'PLACED' || o.status === 'CONFIRMED') && (
+                      <button type="button" className="text-sm px-3 py-1.5 rounded-lg bg-brand/10 text-brand hover:bg-brand/20" onClick={() => adminApi.shipOrder(o.id).then(load)}>Mark shipped</button>
+                    )}
+                    {o.status === 'SHIPPED' && (
+                      <button type="button" className="text-sm px-3 py-1.5 rounded-lg bg-brand/10 text-brand hover:bg-brand/20" onClick={() => adminApi.deliverOrder(o.id).then(load)}>Mark delivered</button>
+                    )}
+                  </div>
+                </div>
+              </DashboardListItem>
+            ))}
+          </div>
+        )
       )}
 
       {tab === 'users' && (
-        <div className="space-y-3">
-          {users.map((u) => (
-            <div key={u.id} className="border rounded-lg p-4 flex justify-between items-center gap-2">
-              <div>
-                <p className="font-medium">{u.name || u.email}</p>
-                <p className="text-sm text-gray-500">{u.role} · {u.email || u.mobile}</p>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {(u.isBlocked || u.blocked) ? (
-                  <button type="button" className="text-sm text-brand" onClick={() => adminApi.unblockUser(u.id).then(load)}>Unblock</button>
-                ) : (
-                  <button type="button" className="text-sm text-red-500" onClick={() => adminApi.blockUser(u.id).then(load)}>Block</button>
-                )}
-                {u.role !== 'ADMIN' && (
-                  <select className="text-sm border rounded px-2 py-1" defaultValue={u.role} onChange={(e) => adminApi.updateRole(u.id, e.target.value).then(load)}>
-                    <option value="CUSTOMER">Customer</option>
-                    <option value="SELLER">Seller</option>
-                    <option value="ADMIN">Admin</option>
-                  </select>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        users.length === 0 ? (
+          <DashboardEmpty icon={Users} title="No users" message="Registered customers and staff will appear here." />
+        ) : (
+          <div className="space-y-3">
+            {users.map((u) => (
+              <DashboardListItem key={u.id}>
+                <div className="flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{u.name || u.email}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{u.role} · {u.email || u.mobile}</p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {(u.isBlocked || u.blocked) ? (
+                      <button type="button" className="text-sm px-3 py-1.5 rounded-lg text-brand hover:bg-brand/5" onClick={() => adminApi.unblockUser(u.id).then(load)}>Unblock</button>
+                    ) : (
+                      <button type="button" className="text-sm px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50" onClick={() => adminApi.blockUser(u.id).then(load)}>Block</button>
+                    )}
+                    {u.role !== 'ADMIN' && (
+                      <select className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white" defaultValue={u.role} onChange={(e) => adminApi.updateRole(u.id, e.target.value).then(load)}>
+                        <option value="CUSTOMER">Customer</option>
+                        <option value="SELLER">Seller</option>
+                        <option value="ADMIN">Admin</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+              </DashboardListItem>
+            ))}
+          </div>
+        )
       )}
 
       {tab === 'sellers' && (
-        <div className="space-y-3">
-          {sellers.map((s) => (
-            <div key={s.id} className="border rounded-lg p-4 flex justify-between">
-              <div>
-                <p className="font-medium">{s.businessName || s.user?.name}</p>
-                <p className="text-sm text-gray-500">{s.status}</p>
-              </div>
-              <div className="flex gap-2">
-                {s.status === 'PENDING' && (
-                  <>
-                    <button type="button" className="text-sm text-brand" onClick={() => adminApi.approveSeller(s.id).then(load)}>Approve</button>
-                    <button type="button" className="text-sm text-red-500" onClick={() => adminApi.rejectSeller(s.id).then(load)}>Reject</button>
-                  </>
-                )}
-                {s.status === 'APPROVED' && (
-                  <button type="button" className="text-sm text-red-500" onClick={() => adminApi.suspendSeller(s.id).then(load)}>Suspend</button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        sellers.length === 0 ? (
+          <DashboardEmpty icon={Store} title="No sellers" message="Seller applications will appear here for approval." />
+        ) : (
+          <div className="space-y-3">
+            {sellers.map((s) => (
+              <DashboardListItem key={s.id}>
+                <div className="flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{s.businessName || s.userName}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{s.status} · {s.userEmail || ''}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {s.status === 'PENDING' && (
+                      <>
+                        <button type="button" className="text-sm px-3 py-1.5 rounded-lg text-brand hover:bg-brand/5" onClick={() => adminApi.approveSeller(s.id).then(load)}>Approve</button>
+                        <button type="button" className="text-sm px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50" onClick={() => adminApi.rejectSeller(s.id).then(load)}>Reject</button>
+                      </>
+                    )}
+                    {s.status === 'APPROVED' && (
+                      <button type="button" className="text-sm px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50" onClick={() => adminApi.suspendSeller(s.id).then(load)}>Suspend</button>
+                    )}
+                  </div>
+                </div>
+              </DashboardListItem>
+            ))}
+          </div>
+        )
       )}
 
       {tab === 'products' && (
-        <div className="space-y-3">
-          {products.map((p) => (
-            <div key={p.id} className="border rounded-lg p-4 flex justify-between items-center">
-              <div>
-                <p className="font-medium">{p.name}</p>
-                <p className="text-sm text-gray-500">{p.status} · {formatINR(p.finalPrice || p.basePrice)}</p>
-              </div>
-              <div className="flex gap-2">
-                <button type="button" className="text-sm text-brand" onClick={() => adminApi.toggleFeatured(p.id, !p.isFeatured).then(load)}>{p.isFeatured ? 'Unfeature' : 'Feature'}</button>
-                <button type="button" className="text-sm" onClick={() => adminApi.updateProductStatus(p.id, p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE').then(load)}>Toggle status</button>
-              </div>
+        products.length === 0 ? (
+          <DashboardEmpty icon={Package} title="No products" message="Products from all sellers will appear here." />
+        ) : (
+          <div className="space-y-3">
+            {products.map((p) => (
+              <DashboardListItem key={p.id}>
+                <div className="flex justify-between items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+                      {p.primaryImageUrl ? (
+                        <img src={resolveImageUrl(p.primaryImageUrl)} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400"><Package className="w-5 h-5" /></div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold">{p.name}</p>
+                      <p className="text-sm text-gray-500">
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs mr-2 ${p.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100'}`}>{p.status}</span>
+                        {formatINR(p.finalPrice || p.basePrice)}
+                        {p.totalStock != null && ` · Stock ${p.totalStock}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <button type="button" className="text-sm px-3 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50" onClick={() => startEditProduct(p.id)} disabled={productEditLoading}>Edit</button>
+                    <button type="button" className="text-sm px-3 py-1.5 rounded-lg border border-brand/30 text-brand hover:bg-brand/5" onClick={() => adminApi.toggleFeatured(p.id, !p.isFeatured).then(load)}>{p.isFeatured ? 'Unfeature' : 'Feature'}</button>
+                    <button type="button" className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50" onClick={() => adminApi.updateProductStatus(p.id, p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE').then(load)}>Toggle status</button>
+                  </div>
+                </div>
+              </DashboardListItem>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === 'edit-product' && editingProduct && (
+        <form onSubmit={saveProductEdit} className="border rounded-xl p-6 max-w-xl space-y-3 bg-white">
+          <h2 className="font-semibold text-lg mb-2">Edit Product</h2>
+          <input className="input-field" placeholder="Product name" required value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} />
+          <textarea className="input-field" placeholder="Description" value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} />
+          <input className="input-field" type="number" placeholder="Selling price" required value={productForm.basePrice} onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })} />
+          <input className="input-field" type="number" placeholder="MRP" required value={productForm.mrp} onChange={(e) => setProductForm({ ...productForm, mrp: e.target.value })} />
+          <p className="text-sm font-medium pt-2">Variants / inventory</p>
+          {productForm.variants.map((v, i) => (
+            <div key={v.id || i} className="flex gap-2 items-center">
+              <span className="text-sm text-gray-600 w-16">{v.size || 'Variant'}</span>
+              <input className="input-field flex-1" type="number" min="0" placeholder="Stock qty" value={v.stockQuantity} onChange={(e) => {
+                const vs = [...productForm.variants]
+                vs[i] = { ...vs[i], stockQuantity: e.target.value }
+                setProductForm({ ...productForm, variants: vs })
+              }} />
             </div>
           ))}
-        </div>
+          <div className="flex gap-2 pt-2">
+            <button type="submit" className="btn-primary">Save Changes</button>
+            <button type="button" className="btn-outline" onClick={() => { setEditingProduct(null); setTab('products') }}>Cancel</button>
+          </div>
+        </form>
       )}
 
       {tab === 'returns' && (
@@ -205,7 +348,7 @@ function AdminDashboardContent() {
           {tickets.map((t) => (
             <div key={t.id} className="border rounded-lg p-4">
               <p className="font-medium">{t.subject}</p>
-              <p className="text-sm text-gray-600">{t.message}</p>
+              <p className="text-sm text-gray-600">{t.message || 'No message'}</p>
               <div className="flex gap-2 mt-2">
                 <span className="text-xs bg-gray-100 px-2 py-1 rounded">{t.status}</span>
                 {t.status === 'OPEN' && (
@@ -239,7 +382,7 @@ function AdminDashboardContent() {
 
       {tab === 'coupons' && (
         <div className="grid md:grid-cols-2 gap-6">
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); adminApi.createCoupon({ ...couponForm, discountValue: Number(couponForm.discountValue), minOrderAmount: Number(couponForm.minOrderAmount), active: true }).then(load) }}>
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); adminApi.createCoupon({ code: couponForm.code, type: couponForm.type, discountValue: Number(couponForm.discountValue), minOrderAmount: Number(couponForm.minOrderAmount), isActive: true, description: `${couponForm.discountValue}% off` }).then(load) }}>
             <h2 className="font-semibold">Create coupon</h2>
             <input className="input-field" placeholder="Code" value={couponForm.code} onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })} required />
             <input className="input-field" type="number" placeholder="Discount value" value={couponForm.discountValue} onChange={(e) => setCouponForm({ ...couponForm, discountValue: e.target.value })} />
@@ -283,7 +426,10 @@ function AdminDashboardContent() {
 
       {tab === 'payouts' && (
         <div className="space-y-3">
-          <h2 className="font-semibold mb-4">Seller Payouts</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-semibold">Seller Payouts</h2>
+            <button type="button" className="text-sm btn-primary" onClick={() => adminApi.processPayouts().then(loadExtendedReports)}>Process monthly payouts</button>
+          </div>
           {sellerPayouts.length === 0 ? <p className="text-gray-500 text-sm">No payouts yet.</p> : sellerPayouts.map((p) => (
             <div key={p.id} className="border rounded-xl p-4 flex justify-between items-center">
               <div>
@@ -302,17 +448,18 @@ function AdminDashboardContent() {
       {tab === 'fraud' && (
         <div className="space-y-4">
           <h2 className="font-semibold mb-4">Fraud Queue</h2>
-          {fraudQueue.length === 0 ? <p className="text-sm text-gray-500">No flagged users.</p> : fraudQueue.map((userId) => (
-            <div key={userId} className="border rounded-xl p-4 flex justify-between items-center">
+          {fraudQueue.length === 0 ? <p className="text-sm text-gray-500">No flagged users.</p> : fraudQueue.map((user) => (
+            <div key={user.id} className="border rounded-xl p-4 flex justify-between items-center">
               <div>
-                <p className="text-sm font-mono text-gray-700">{userId}</p>
-                {impersonateMsg[userId] && <p className="text-xs text-green-600 mt-1">{impersonateMsg[userId]}</p>}
+                <p className="text-sm font-medium">{user.name || user.email || user.mobile}</p>
+                <p className="text-xs text-gray-500">{user.email} · Flag: {user.fraudFlag}</p>
+                {impersonateMsg[user.id] && <p className="text-xs text-green-600 mt-1">{impersonateMsg[user.id]}</p>}
               </div>
               <div className="flex gap-2">
                 <button type="button" className="text-sm text-brand border border-brand px-3 py-1.5 rounded-lg hover:bg-brand/5"
-                  onClick={() => impersonate(userId)}>Impersonate</button>
+                  onClick={() => impersonate(user.id)}>Impersonate</button>
                 <button type="button" className="text-sm text-green-700 border border-green-200 px-3 py-1.5 rounded-lg hover:bg-green-50"
-                  onClick={() => adminApi.clearFraud(userId).then(loadExtendedReports)}>Clear Flag</button>
+                  onClick={() => adminApi.clearFraud(user.id).then(loadExtendedReports)}>Clear Flag</button>
               </div>
             </div>
           ))}
@@ -325,9 +472,9 @@ function AdminDashboardContent() {
             <h2 className="font-semibold mb-4">Sales (last 30 days)</h2>
             {salesReport ? (
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div><dt className="text-gray-500">Total sales</dt><dd className="font-bold text-lg">{formatINR(salesReport.totalSales || salesReport.totalRevenue || 0)}</dd></div>
+                <div><dt className="text-gray-500">Total sales</dt><dd className="font-bold text-lg">{formatINR(salesReport.gmv || salesReport.totalSales || salesReport.totalRevenue || 0)}</dd></div>
                 <div><dt className="text-gray-500">Orders</dt><dd className="font-bold text-lg">{salesReport.orderCount ?? salesReport.totalOrders ?? '—'}</dd></div>
-                <div><dt className="text-gray-500">Avg order value</dt><dd className="font-bold text-lg">{formatINR(salesReport.avgOrderValue || 0)}</dd></div>
+                <div><dt className="text-gray-500">Avg order value</dt><dd className="font-bold text-lg">{salesReport.orderCount > 0 ? formatINR((salesReport.gmv || 0) / salesReport.orderCount) : formatINR(salesReport.avgOrderValue || 0)}</dd></div>
                 <div><dt className="text-gray-500">New users</dt><dd className="font-bold text-lg">{salesReport.newUsers ?? '—'}</dd></div>
               </dl>
             ) : <p className="text-gray-500">Loading report...</p>}

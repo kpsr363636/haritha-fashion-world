@@ -6,6 +6,7 @@ import { useCart } from '../context/CartContext'
 import { addressApi } from '../api/orderApi'
 import { orderApi, paymentApi } from '../api/orderApi'
 import { couponApi, giftCardApi } from '../api/giftCardApi'
+import { loyaltyApi } from '../api/userApi'
 import { formatINR } from '../utils/formatters'
 import { openRazorpayCheckout } from '../utils/razorpay'
 import { trackEvent } from '../utils/analytics'
@@ -36,8 +37,10 @@ export default function CheckoutPage() {
   const [couponMsg, setCouponMsg] = useState('')
   const [useLoyalty, setUseLoyalty] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [paymentPending, setPaymentPending] = useState(false)
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0)
 
-  const userPoints = user?.loyaltyPoints || 0
+  const userPoints = loyaltyPoints || user?.loyaltyPoints || 0
   const pointsValue = Math.floor(userPoints * 0.10) // ₹0.10 per point
   const maxLoyaltyDiscount = cart ? Math.floor((cart.total || 0) * 0.10) : 0 // max 10% of order
   const loyaltyDiscount = useLoyalty ? Math.min(pointsValue, maxLoyaltyDiscount) : 0
@@ -55,6 +58,7 @@ export default function CheckoutPage() {
     if (isAuthenticated) {
       refreshCart()
       loadAddresses()
+      loyaltyApi.summary().then((r) => setLoyaltyPoints(r.data?.points || 0)).catch(() => {})
     }
   }, [isAuthenticated, refreshCart])
 
@@ -62,6 +66,14 @@ export default function CheckoutPage() {
     return (
       <div className="page-shell py-12">
         <EmptyState icon="🔐" title="Login to checkout" message="Sign in to complete your purchase securely." actionLabel="Login" actionTo="/login" />
+      </div>
+    )
+  }
+
+  if (!cart?.items?.length) {
+    return (
+      <div className="page-shell py-12">
+        <EmptyState icon="🛍️" title="Your cart is empty" message="Add items before checkout." actionLabel="Browse products" actionTo="/products" />
       </div>
     )
   }
@@ -99,8 +111,21 @@ export default function CheckoutPage() {
 
   const estimatedTotal = cart ? Math.max(0, cart.total - (couponDiscount || 0)) : 0
 
+  const handlePaymentFailure = async (order, message) => {
+    setPaymentPending(false)
+    try {
+      await orderApi.cancel(order.orderId)
+    } catch {
+      // Order may already be cancelled or in an unexpected state
+    }
+    await refreshCart()
+    alert(message || 'Payment was not completed. Your order was cancelled and items were restored to your cart.')
+    navigate('/cart')
+  }
+
   const placeOrder = async () => {
     if (!selectedAddress) return alert('Select or add an address')
+    if (!cart?.items?.length) return alert('Your cart is empty')
     setLoading(true)
     try {
       trackEvent('begin_checkout', { value: cart?.total })
@@ -125,6 +150,8 @@ export default function CheckoutPage() {
           navigate(`/orders/${order.orderId}`)
           return
         }
+        setLoading(false)
+        setPaymentPending(true)
         trackEvent('add_payment_info', { payment_type: paymentMethod })
         openRazorpayCheckout({
           keyId: order.razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
@@ -133,17 +160,25 @@ export default function CheckoutPage() {
           name: user?.name,
           email: user?.email,
           mobile: user?.mobile,
+          callbackPath: `/payment/return?orderId=${order.orderId}`,
           onSuccess: async (response) => {
-            await paymentApi.verify({
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature
-            })
-            trackEvent('purchase', { transaction_id: order.orderNumber, value: order.totalAmount, currency: 'INR' })
-            navigate(`/orders/${order.orderId}`)
+            try {
+              await paymentApi.verify({
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature
+              })
+              trackEvent('purchase', { transaction_id: order.orderNumber, value: order.totalAmount, currency: 'INR' })
+              setPaymentPending(false)
+              await refreshCart()
+              navigate(`/orders/${order.orderId}`)
+            } catch (err) {
+              await handlePaymentFailure(order, err?.message || 'Payment verification failed')
+            }
           },
-          onFailure: (err) => alert(err.message || 'Payment failed')
+          onFailure: (err) => handlePaymentFailure(order, err?.message || 'Payment cancelled')
         })
+        return
       } else {
         trackEvent('purchase', { transaction_id: order.orderNumber, value: order.totalAmount, currency: 'INR' })
         await refreshCart()
@@ -285,8 +320,8 @@ export default function CheckoutPage() {
                 </div>
               </div>
             )}
-            <button onClick={placeOrder} disabled={loading || !selectedAddress} className="btn-primary w-full py-4 text-base">
-              {loading ? 'Processing...' : 'Place Order'}
+            <button onClick={placeOrder} disabled={loading || paymentPending || !selectedAddress} className="btn-primary w-full py-4 text-base">
+              {paymentPending ? 'Complete payment in Razorpay…' : loading ? 'Processing...' : 'Place Order'}
             </button>
             <div className="flex items-center justify-center gap-2 mt-4 text-xs text-gray-500">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />

@@ -1,18 +1,18 @@
 import { useState, useRef } from 'react'
 import { X, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react'
 import { sellerApi } from '../../api/adminApi'
-import api from '../../api/axiosInstance'
 
 export default function BulkUploadModal({ onClose, onDone }) {
-  const [mode, setMode] = useState('excel') // 'excel' | 'csv'
+  const [mode, setMode] = useState('excel')
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState(null)
   const fileRef = useRef()
 
   const downloadTemplate = async () => {
-    const res = await api.get('/seller/bulk-upload/template', { responseType: 'blob' })
-    const url = URL.createObjectURL(res.data)
+    const data = await sellerApi.bulkUploadTemplate()
+    const blob = data instanceof Blob ? data : new Blob([typeof data === 'string' ? data : ''], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download = 'bulk-upload-template.csv'
@@ -28,12 +28,11 @@ export default function BulkUploadModal({ onClose, onDone }) {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const endpoint = mode === 'excel' ? '/seller/bulk-upload/excel' : '/seller/bulk-upload/csv'
-      const { data } = await api.post(endpoint, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      setResult(data)
-      if (data.created > 0) onDone?.()
+      const res = mode === 'excel'
+        ? await sellerApi.bulkUploadExcel(formData)
+        : await sellerApi.bulkUploadCsv(formData)
+      setResult(res.data)
+      if (res.data?.created > 0) onDone?.()
     } catch (err) {
       setResult({ error: err.message || 'Upload failed' })
     } finally {

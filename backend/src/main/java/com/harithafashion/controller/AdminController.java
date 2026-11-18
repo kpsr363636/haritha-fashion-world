@@ -3,8 +3,12 @@ package com.harithafashion.controller;
 import com.harithafashion.dto.request.BannerRequest;
 import com.harithafashion.dto.request.CouponRequest;
 import com.harithafashion.dto.request.CreateProductRequest;
+import com.harithafashion.dto.request.UpdateProductRequest;
 import com.harithafashion.dto.response.ApiResponse;
+import com.harithafashion.dto.response.OrderSummaryResponse;
 import com.harithafashion.dto.response.PageResponse;
+import com.harithafashion.dto.response.ProductCardResponse;
+import com.harithafashion.dto.response.ProductDetailResponse;
 import com.harithafashion.entity.*;
 import com.harithafashion.entity.enums.ProductStatus;
 import com.harithafashion.entity.enums.SellerStatus;
@@ -42,7 +46,7 @@ public class AdminController {
     }
 
     @GetMapping("/orders")
-    public ApiResponse<PageResponse<Order>> orders(@RequestParam(defaultValue = "0") int page,
+    public ApiResponse<PageResponse<OrderSummaryResponse>> orders(@RequestParam(defaultValue = "0") int page,
                                                    @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(PageResponse.from(adminService.listOrders(page, size)));
     }
@@ -94,10 +98,30 @@ public class AdminController {
     }
 
     @GetMapping("/products")
-    public ApiResponse<?> products(@RequestParam(defaultValue = "0") int page,
+    public ApiResponse<PageResponse<ProductCardResponse>> products(@RequestParam(defaultValue = "0") int page,
                                    @RequestParam(required = false) ProductStatus status,
                                    @RequestParam(required = false) UUID sellerId) {
-        return ApiResponse.ok(PageResponse.from(sellerProductService.adminListProducts(page, 20, status, sellerId)));
+        return ApiResponse.ok(sellerProductService.adminListProducts(page, 20, status, sellerId));
+    }
+
+    @GetMapping("/products/{id}")
+    public ApiResponse<ProductDetailResponse> getProduct(@PathVariable UUID id) {
+        return ApiResponse.ok(sellerProductService.adminGetProduct(id));
+    }
+
+    @PutMapping("/products/{id}")
+    public ApiResponse<ProductDetailResponse> updateProduct(@PathVariable UUID id,
+                                                            @RequestBody UpdateProductRequest req) {
+        sellerProductService.adminUpdateProduct(id, req);
+        return ApiResponse.ok(sellerProductService.adminGetProduct(id));
+    }
+
+    @PatchMapping("/products/{id}/variants/{variantId}/stock")
+    public ApiResponse<ProductDetailResponse> updateStock(@PathVariable UUID id,
+                                                          @PathVariable UUID variantId,
+                                                          @RequestBody Map<String, Integer> body) {
+        sellerProductService.adminUpdateStock(id, variantId, body.get("quantity"));
+        return ApiResponse.ok(sellerProductService.adminGetProduct(id));
     }
 
     @PostMapping("/products")
@@ -106,13 +130,15 @@ public class AdminController {
     }
 
     @PatchMapping("/products/{id}/featured")
-    public ApiResponse<Product> featured(@PathVariable UUID id, @RequestBody Map<String, Boolean> body) {
-        return ApiResponse.ok(sellerProductService.adminSetFeatured(id, Boolean.TRUE.equals(body.get("featured"))));
+    public ApiResponse<ProductCardResponse> featured(@PathVariable UUID id, @RequestBody Map<String, Boolean> body) {
+        sellerProductService.adminSetFeatured(id, Boolean.TRUE.equals(body.get("featured")));
+        return ApiResponse.ok(sellerProductService.adminGetProductCard(id));
     }
 
     @PatchMapping("/products/{id}/status")
-    public ApiResponse<Product> productStatus(@PathVariable UUID id, @RequestBody Map<String, String> body) {
-        return ApiResponse.ok(sellerProductService.adminSetStatus(id, ProductStatus.valueOf(body.get("status"))));
+    public ApiResponse<ProductCardResponse> productStatus(@PathVariable UUID id, @RequestBody Map<String, String> body) {
+        sellerProductService.adminSetStatus(id, ProductStatus.valueOf(body.get("status")));
+        return ApiResponse.ok(sellerProductService.adminGetProductCard(id));
     }
 
     @GetMapping("/banners")
@@ -202,7 +228,7 @@ public class AdminController {
 
     @GetMapping("/support/tickets")
     public ApiResponse<?> supportTickets(@RequestParam(defaultValue = "0") int page) {
-        return ApiResponse.ok(supportService.getAllTickets(page, 20));
+        return ApiResponse.ok(PageResponse.from(supportService.getAllTickets(page, 20)));
     }
 
     @PutMapping("/support/tickets/{id}/status")
@@ -257,7 +283,7 @@ public class AdminController {
     @GetMapping("/payouts")
     public ApiResponse<?> listPayouts(@RequestParam(defaultValue = "0") int page,
                                       @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(adminService.listPayouts(page, size));
+        return ApiResponse.ok(PageResponse.from(adminService.listPayouts(page, size)));
     }
 
     @PostMapping("/payouts/process")

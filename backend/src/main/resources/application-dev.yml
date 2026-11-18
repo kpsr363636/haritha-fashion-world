@@ -14,3 +14,18 @@ logging:
 app:
   cors:
     allowed-origins: http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173
+  delivery:
+    charge: 1
+    free-threshold: 999999
+
+razorpay:
+  key-id: ${RAZORPAY_KEY_ID:}
+  key-secret: ${RAZORPAY_KEY_SECRET:}
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+
+# Local dev: store uploads in the frontend's public folder (served by Vite)
+storage:
+  type: ${STORAGE_TYPE:local}
+  local:
+    dir: ${STORAGE_LOCAL_DIR:../frontend/public/uploads}
+  public-url: ${STORAGE_PUBLIC_URL:http://localhost:5173/uploads}

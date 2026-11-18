@@ -1,5 +1,6 @@
 package com.harithafashion.service;
 
+import com.harithafashion.dto.response.SupportTicketSummaryResponse;
 import com.harithafashion.entity.*;
 import com.harithafashion.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -59,7 +60,24 @@ public class SupportService {
         return ticketRepository.save(ticket);
     }
 
-    public Page<SupportTicket> getAllTickets(int page, int size) {
-        return ticketRepository.findAll(PageRequest.of(page, size));
+    @Transactional(readOnly = true)
+    public Page<SupportTicketSummaryResponse> getAllTickets(int page, int size) {
+        return ticketRepository.findAll(PageRequest.of(page, size)).map(ticket -> {
+            User user = ticket.getUser();
+            String message = messageRepository.findByTicketIdOrderByCreatedAtAsc(ticket.getId()).stream()
+                    .findFirst()
+                    .map(SupportMessage::getMessage)
+                    .orElse("");
+            return SupportTicketSummaryResponse.builder()
+                    .id(ticket.getId())
+                    .ticketNumber(ticket.getTicketNumber())
+                    .subject(ticket.getSubject())
+                    .status(ticket.getStatus())
+                    .category(ticket.getCategory())
+                    .userName(user != null ? user.getName() : "")
+                    .message(message)
+                    .createdAt(ticket.getCreatedAt())
+                    .build();
+        });
     }
 }

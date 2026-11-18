@@ -4,6 +4,24 @@ import { useAuth } from './AuthContext'
 
 const WishlistContext = createContext(null)
 
+async function syncGuestWishlist() {
+  const saved = localStorage.getItem('wishlist')
+  if (!saved) return
+  let guestItems = []
+  try {
+    guestItems = JSON.parse(saved)
+  } catch {
+    localStorage.removeItem('wishlist')
+    return
+  }
+  if (!guestItems.length) {
+    localStorage.removeItem('wishlist')
+    return
+  }
+  await Promise.all(guestItems.map((p) => wishlistApi.add(p.id).catch(() => {})))
+  localStorage.removeItem('wishlist')
+}
+
 export function WishlistProvider({ children }) {
   const { isAuthenticated } = useAuth()
   const [items, setItems] = useState([])
@@ -23,8 +41,12 @@ export function WishlistProvider({ children }) {
   }, [isAuthenticated])
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    if (!isAuthenticated) {
+      refresh()
+      return
+    }
+    syncGuestWishlist().finally(refresh)
+  }, [isAuthenticated, refresh])
 
   const toggle = async (product) => {
     const exists = items.find((i) => i.id === product.id)

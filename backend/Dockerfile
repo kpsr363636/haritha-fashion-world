@@ -21,7 +21,7 @@ COPY --from=builder /app/target/haritha-fashion-1.0.0.jar app.jar
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget -qO- http://localhost:8080/api/actuator/health || exit 1
+  CMD curl -f http://localhost:8080/api/health || exit 1
 
 # Override JAVA_OPTS for small hosts (e.g. Render free 512 MB)
 ENV JAVA_OPTS="-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"

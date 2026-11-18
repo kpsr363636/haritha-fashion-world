@@ -29,6 +29,7 @@ public class ProductDetailResponse {
     private Integer returnWindowDays;
     private String sellerName;
     private BigDecimal sellerRating;
+    private UUID categoryId;
     private List<ProductVariantResponse> variants;
     private List<ProductImageResponse> images;
     private String videoUrl;

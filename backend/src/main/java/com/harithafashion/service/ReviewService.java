@@ -1,6 +1,7 @@
 package com.harithafashion.service;
 
 import com.harithafashion.dto.request.ReviewRequest;
+import com.harithafashion.dto.response.ReviewSummaryResponse;
 import com.harithafashion.entity.*;
 import com.harithafashion.exception.BadRequestException;
 import com.harithafashion.exception.ResourceNotFoundException;
@@ -25,6 +26,7 @@ public class ReviewService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final OrderItemRepository orderItemRepository;
+    private final SellerRepository sellerRepository;
 
     public Page<Review> getProductReviews(UUID productId, int page, int size) {
         return reviewRepository.findByProductIdAndIsApprovedTrueOrderByCreatedAtDesc(
@@ -89,6 +91,25 @@ public class ReviewService {
 
     public Page<Review> listPending(int page, int size) {
         return reviewRepository.findByIsApprovedFalseOrderByCreatedAtDesc(PageRequest.of(page, size));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReviewSummaryResponse> listForSeller(UUID userId, int page, int size) {
+        Seller seller = sellerRepository.findByUserId(userId).orElseThrow();
+        return reviewRepository.findBySellerId(seller.getId(), PageRequest.of(page, size))
+                .map(this::toSummary);
+    }
+
+    private ReviewSummaryResponse toSummary(Review r) {
+        return ReviewSummaryResponse.builder()
+                .id(r.getId())
+                .productName(r.getProduct() != null ? r.getProduct().getName() : null)
+                .rating(r.getRating())
+                .title(r.getTitle())
+                .body(r.getBody())
+                .sellerReply(r.getSellerReply())
+                .createdAt(r.getCreatedAt())
+                .build();
     }
 
     private void updateProductRating(UUID productId) {

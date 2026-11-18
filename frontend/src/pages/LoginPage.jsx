@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { authApi } from '../api/authApi'
 import { useAuth } from '../context/AuthContext'
 import { trackEvent } from '../utils/analytics'
@@ -29,6 +29,64 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const googleBtnRef = useRef(null)
+
+  const redirectAfterLogin = (authData, method) => {
+    login(authData)
+    trackEvent('login', { method })
+    const from = location.state?.from
+    if (from) {
+      navigate(from)
+      return
+    }
+    const role = authData.user?.role
+    if (role === 'ADMIN') navigate('/admin/dashboard')
+    else if (role === 'SELLER') navigate('/seller/dashboard')
+    else navigate('/')
+  }
+
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId || !googleBtnRef.current) return
+
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id || !googleBtnRef.current) return
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          setLoading(true)
+          setError('')
+          try {
+            const res = await authApi.googleLogin(response.credential)
+            redirectAfterLogin(res.data, 'google')
+          } catch (err) {
+            setError(err.message || 'Google login failed')
+          } finally {
+            setLoading(false)
+          }
+        },
+      })
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: googleBtnRef.current.offsetWidth || 360,
+        text: 'continue_with',
+      })
+    }
+
+    if (window.google?.accounts?.id) {
+      initGoogle()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = initGoogle
+    document.body.appendChild(script)
+  }, [login, navigate, location.state?.from])
 
   useEffect(() => {
     if (countdown <= 0) return
@@ -60,9 +118,7 @@ export default function LoginPage() {
     setLoading(true); setError('')
     try {
       const res = await authApi.verifyOtp(mobile, otp)
-      login(res.data)
-      trackEvent('login', { method: 'otp' })
-      navigate('/')
+      redirectAfterLogin(res.data, 'otp')
     } catch (err) {
       setError(err.message || 'Invalid OTP')
       setOtp('')
@@ -102,9 +158,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = await authApi.login({ email, password })
-      login(res.data)
-      trackEvent('login', { method: 'email' })
-      navigate('/')
+      redirectAfterLogin(res.data, 'email')
     } catch (err) {
       setError(err.message || 'Login failed')
     } finally {
@@ -167,15 +221,29 @@ export default function LoginPage() {
         <div className="relative flex justify-center"><span className="px-4 bg-white text-xs text-gray-400">or continue with</span></div>
       </div>
 
-      <button
-        type="button"
-        onClick={handleGoogleLogin}
-        disabled={loading}
-        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-      >
-        <GoogleIcon />
-        Continue with Google
-      </button>
+      {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
+        <>
+          <div ref={googleBtnRef} className="w-full flex justify-center" />
+          {import.meta.env.DEV && (
+            <p className="mt-3 text-xs text-gray-400 text-center leading-relaxed">
+              Google origin to register:{' '}
+              <code className="text-gray-600">{window.location.origin}</code>
+              <br />
+              Open this page in Chrome/Safari (not an IDE preview). Client ID must be type{' '}
+              <strong>Web application</strong>.
+            </p>
+          )}
+        </>
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-400"
+        >
+          <GoogleIcon />
+          Google login not configured
+        </button>
+      )}
 
       <p className="text-center text-sm text-gray-500 mt-8 pt-6 border-t border-gray-100">
         New here? <Link to="/register" className="text-brand font-medium">Create account</Link>

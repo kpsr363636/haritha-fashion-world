@@ -14,6 +14,10 @@ export const adminApi = {
   rejectSeller: (id) => api.put(`/admin/sellers/${id}/reject`),
   suspendSeller: (id) => api.put(`/admin/sellers/${id}/suspend`),
   products: (page = 0) => api.get('/admin/products', { params: { page } }),
+  getProduct: (id) => api.get(`/admin/products/${id}`),
+  updateProduct: (id, data) => api.put(`/admin/products/${id}`, data),
+  updateProductStock: (productId, variantId, quantity) =>
+    api.patch(`/admin/products/${productId}/variants/${variantId}/stock`, { quantity }),
   toggleFeatured: (id, featured) => api.patch(`/admin/products/${id}/featured`, { featured }),
   updateProductStatus: (id, status) => api.patch(`/admin/products/${id}/status`, { status }),
   banners: () => api.get('/admin/banners'),
@@ -41,7 +45,8 @@ export const adminApi = {
   // Extended reports
   abandonedCartsReport: () => api.get('/admin/reports/abandoned-carts'),
   topProductsReport: () => api.get('/admin/reports/products/top'),
-  couponsReport: () => api.get('/admin/reports/coupons')
+  couponsReport: () => api.get('/admin/reports/coupons'),
+  processPayouts: () => api.post('/admin/payouts/process')
 }
 
 export const sellerApi = {
@@ -60,7 +65,11 @@ export const sellerApi = {
   payouts: (page = 0) => api.get('/seller/payouts', { params: { page } }),
   replyReview: (reviewId, reply) => api.post(`/seller/reviews/${reviewId}/reply`, { reply }),
   answerQuestion: (questionId, answer) => api.post(`/seller/questions/${questionId}/answers`, { answer }),
-  addProductImage: (productId, imageUrl) => api.post(`/seller/products/${productId}/images`, { imageUrl, isPrimary: false }),
-  bulkUploadExcel: (formData) => api.post('/seller/bulk-upload/excel', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  bulkUploadCsv: (formData) => api.post('/seller/bulk-upload/csv', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+  addProductImage: (productId, imageUrl, isPrimary = false) =>
+    api.post(`/seller/products/${productId}/images`, { imageUrl, isPrimary }),
+  bulkUploadExcel: (formData) => api.post('/seller/products/bulk-upload/excel', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  bulkUploadCsv: (formData) => api.post('/seller/products/bulk-upload/csv', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  bulkUploadTemplate: () => api.get('/seller/products/bulk-upload/template', { responseType: 'blob' }),
+  sellerReviews: (page = 0) => api.get('/seller/reviews', { params: { page } }),
+  sellerQuestions: (page = 0) => api.get('/seller/questions', { params: { page } })
 }

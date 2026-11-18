@@ -3,8 +3,8 @@ const PLACEHOLDER = '/images/placeholder-product.svg'
 /** Resolve image URL from API — supports local /images paths and external URLs. */
 export function resolveImageUrl(url) {
   if (!url) return PLACEHOLDER
-  if (url.startsWith('/images/') || url.startsWith('http://') || url.startsWith('https://')) return url
-  if (url.startsWith('images/')) return `/${url}`
+  if (url.startsWith('/images/') || url.startsWith('/uploads/') || url.startsWith('http://') || url.startsWith('https://')) return url
+  if (url.startsWith('images/') || url.startsWith('uploads/')) return `/${url}`
   return url
 }
 

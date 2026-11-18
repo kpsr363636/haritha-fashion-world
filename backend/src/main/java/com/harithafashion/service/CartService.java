@@ -32,15 +32,19 @@ public class CartService {
     private final ProductVariantRepository variantRepository;
     private final ProductImageRepository imageRepository;
     private final StockReservationService stockReservationService;
+    private final StockReservationRepository reservationRepository;
     private final UserRepository userRepository;
 
     @Transactional
     public CartResponse addToCart(UUID userId, AddToCartRequest req) {
         ProductVariant variant = variantRepository.findById(req.getVariantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Variant not found"));
-        int available = variant.getStockQuantity() - variant.getReservedQuantity();
+        // Available = global available stock + user's own reservation (they can update their own qty)
+        int userOwnReserved = reservationRepository.findByVariantIdAndUserId(req.getVariantId(), userId)
+                .map(r -> r.getQuantity()).orElse(0);
+        int available = variant.getStockQuantity() - variant.getReservedQuantity() + userOwnReserved;
         if (available < req.getQuantity()) {
-            throw new OutOfStockException("Insufficient stock");
+            throw new OutOfStockException("Only " + available + " item(s) available in stock");
         }
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseGet(() -> {
@@ -95,9 +99,12 @@ public class CartService {
             BigDecimal gst = GstCalculator.extractGst(lineTotal, gstRate);
             gstTotal = gstTotal.add(gst);
             subtotal = subtotal.add(lineTotal);
-            String image = imageRepository.findByProductIdAndIsPrimaryTrue(p.getId())
+            String image = imageRepository.findPrimaryForProduct(p.getId())
                     .map(ProductImage::getImageUrl).orElse(null);
             String variantInfo = buildVariantInfo(variant);
+            int userOwnReserved = reservationRepository.findByVariantIdAndUserId(variant.getId(), userId)
+                    .map(r -> r.getQuantity()).orElse(0);
+            int maxQuantity = variant.getStockQuantity() - variant.getReservedQuantity() + userOwnReserved;
             items.add(CartItemResponse.builder()
                     .id(ci.getId())
                     .productId(p.getId())
@@ -106,6 +113,7 @@ public class CartService {
                     .productImage(image)
                     .variantInfo(variantInfo)
                     .quantity(ci.getQuantity())
+                    .maxQuantity(maxQuantity)
                     .unitPrice(unitPrice)
                     .lineTotal(lineTotal)
                     .priceChanged(false)
@@ -140,8 +148,12 @@ public class CartService {
         }
         int delta = quantity - item.getQuantity();
         if (delta > 0) {
-            int available = item.getVariant().getStockQuantity() - item.getVariant().getReservedQuantity();
-            if (available < delta) throw new OutOfStockException("Insufficient stock");
+            int userOwnReserved = reservationRepository.findByVariantIdAndUserId(item.getVariant().getId(), userId)
+                    .map(r -> r.getQuantity()).orElse(0);
+            int available = item.getVariant().getStockQuantity() - item.getVariant().getReservedQuantity() + userOwnReserved;
+            if (available < quantity) {
+                throw new OutOfStockException("Only " + available + " item(s) available in stock");
+            }
             stockReservationService.reserve(item.getVariant().getId(), userId, delta);
         } else if (delta < 0) {
             stockReservationService.release(item.getVariant().getId(), userId, -delta);
