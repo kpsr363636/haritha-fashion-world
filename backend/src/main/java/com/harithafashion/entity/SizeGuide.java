@@ -22,6 +22,9 @@ public class SizeGuide {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    // Not serialized: it's a lazy proxy (LazyInitializationException outside the session)
+    // and the API response only needs the chart itself.
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private Category category;
