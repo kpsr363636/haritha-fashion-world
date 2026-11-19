@@ -121,20 +121,36 @@ public class AuthService {
 
     @Transactional
     public AuthResponse googleLogin(GoogleLoginRequest req) {
-        Map<String, Object> tokenInfo = WebClient.create()
-                .get()
-                .uri("https://oauth2.googleapis.com/tokeninfo?id_token=" + req.getGoogleToken())
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
-        if (tokenInfo == null || tokenInfo.get("email") == null) {
+        // Without a configured client ID we cannot check the token's audience, and a token
+        // issued to any other Google app would be accepted — so refuse instead.
+        if (googleClientId == null || googleClientId.isBlank()) {
+            throw new UnauthorizedException("Google login is not configured");
+        }
+        if (req.getGoogleToken() == null || req.getGoogleToken().isBlank()) {
             throw new UnauthorizedException("Invalid Google token");
         }
-        if (googleClientId != null && !googleClientId.isBlank()) {
-            Object aud = tokenInfo.get("aud");
-            if (aud == null || !googleClientId.equals(aud.toString())) {
-                throw new UnauthorizedException("Invalid Google token audience");
-            }
+        Map<String, Object> tokenInfo;
+        try {
+            tokenInfo = WebClient.create()
+                    .get()
+                    .uri(uri -> uri.scheme("https").host("oauth2.googleapis.com").path("/tokeninfo")
+                            .queryParam("id_token", req.getGoogleToken()).build())
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+        } catch (Exception e) {
+            throw new UnauthorizedException("Invalid Google token");
+        }
+        if (tokenInfo == null || tokenInfo.get("email") == null || tokenInfo.get("sub") == null) {
+            throw new UnauthorizedException("Invalid Google token");
+        }
+        Object aud = tokenInfo.get("aud");
+        if (aud == null || !googleClientId.equals(aud.toString())) {
+            throw new UnauthorizedException("Invalid Google token audience");
+        }
+        // Accounts are linked by email below, so only trust emails Google has verified
+        if (!"true".equalsIgnoreCase(String.valueOf(tokenInfo.get("email_verified")))) {
+            throw new UnauthorizedException("Google email is not verified");
         }
         String email = (String) tokenInfo.get("email");
         String name = (String) tokenInfo.getOrDefault("name", "");
