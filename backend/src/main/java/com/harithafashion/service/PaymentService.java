@@ -52,6 +52,10 @@ public class PaymentService {
     @Value("${razorpay.webhook-secret:}")
     private String webhookSecret;
 
+    /** Local development only: fake "order_dev_" payments that are auto-approved. Never enable in production. */
+    @Value("${app.payments.dev-mode:false}")
+    private boolean devMode;
+
     @Transactional
     public Map<String, Object> createRazorpayOrder(UUID orderId) {
         Order order = orderRepository.findById(orderId)
@@ -81,8 +85,11 @@ public class PaymentService {
             } catch (RazorpayException e) {
                 throw new PaymentException("Failed to create Razorpay order: " + e.getMessage());
             }
-        } else {
+        } else if (devMode) {
             razorpayOrderId = "order_dev_" + order.getOrderNumber();
+        } else {
+            log.error("Razorpay is not configured (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET missing)");
+            throw new PaymentException("Online payment is temporarily unavailable. Please try again later.");
         }
         paymentRepository.save(Payment.builder()
                 .order(order).razorpayOrderId(razorpayOrderId)
@@ -107,7 +114,7 @@ public class PaymentService {
                 }
             });
         }
-        if (razorpayOrderId != null && razorpayOrderId.startsWith("order_dev_")) {
+        if (devMode && razorpayOrderId != null && razorpayOrderId.startsWith("order_dev_")) {
             markPaymentPaid(razorpayOrderId, razorpayPaymentId != null ? razorpayPaymentId : "pay_dev", signature);
             return;
         }
@@ -144,22 +151,39 @@ public class PaymentService {
 
     @Transactional
     public void handleWebhook(String payload, String signature) {
-        if (webhookSecret != null && !webhookSecret.isBlank()) {
-            String expected = hmacSha256(payload, webhookSecret);
-            if (!expected.equals(signature)) throw new PaymentException("Invalid webhook signature");
+        // Fail closed: without a webhook secret we cannot tell Razorpay's calls from forged ones
+        if (webhookSecret == null || webhookSecret.isBlank()) {
+            throw new PaymentException("Webhook not configured");
+        }
+        if (signature == null || !constantTimeEquals(hmacSha256(payload, webhookSecret), signature)) {
+            throw new PaymentException("Invalid webhook signature");
         }
         JSONObject event = new JSONObject(payload);
         String eventType = event.optString("event");
         if ("payment.captured".equals(eventType)) {
             JSONObject entity = event.getJSONObject("payload").getJSONObject("payment").getJSONObject("entity");
-            verifyPayment(entity.getString("order_id"), entity.getString("id"), signature);
+            String rzpOrderId = entity.getString("order_id");
+            // The webhook signature (checked above) authenticates this event; the checkout
+            // signature does not apply here. Skip if the browser callback already marked it paid.
+            paymentRepository.findByRazorpayOrderId(rzpOrderId).ifPresent(p -> {
+                if (!"PAID".equals(p.getStatus())) {
+                    markPaymentPaid(rzpOrderId, entity.getString("id"), "webhook");
+                }
+            });
         }
     }
 
     private boolean verifySignature(String orderId, String paymentId, String signature) {
-        if (keySecret == null || keySecret.isBlank()) return true;
-        String generated = hmacSha256(orderId + "|" + paymentId, keySecret);
-        return generated.equals(signature);
+        if (keySecret == null || keySecret.isBlank() || signature == null
+                || orderId == null || paymentId == null) {
+            return false; // fail closed
+        }
+        return constantTimeEquals(hmacSha256(orderId + "|" + paymentId, keySecret), signature);
+    }
+
+    private static boolean constantTimeEquals(String a, String b) {
+        return java.security.MessageDigest.isEqual(
+                a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
     }
 
     private String hmacSha256(String data, String secret) {
